@@ -8,6 +8,13 @@ import {
 import type { EvmAddress } from "../types.js";
 import { normalizeUint32 } from "../uint32.js";
 import { normalizeUint256 } from "../uint256.js";
+import { l2Erc721BridgeAbi, l2StandardBridgeAbi } from "./op-abis.js";
+export {
+  l2Erc721BridgeAbi,
+  l2StandardBridgeAbi,
+  l2ToL1MessagePasserAbi,
+  opContractsBedrockArtifactSource,
+} from "./op-abis.js";
 
 export const L2_STANDARD_BRIDGE_ADDRESS =
   "0x4200000000000000000000000000000000000010" as const;
@@ -30,21 +37,6 @@ export const erc721Abi = parseAbi([
   "function getApproved(uint256 tokenId) view returns (address)",
   "function ownerOf(uint256 tokenId) view returns (address)",
   "function safeTransferFrom(address from, address to, uint256 tokenId)",
-]);
-
-export const l2StandardBridgeAbi = parseAbi([
-  "function withdraw(address l2Token, uint256 amount, uint32 minGasLimit, bytes extraData)",
-  "function withdrawTo(address l2Token, address to, uint256 amount, uint32 minGasLimit, bytes extraData)",
-  "event WithdrawalInitiated(address indexed l1Token, address indexed l2Token, address indexed from, address to, uint256 amount, bytes extraData)",
-]);
-
-export const l2ToL1MessagePasserAbi = parseAbi([
-  "function initiateWithdrawal(address target, uint256 gasLimit, bytes data) payable",
-  "event MessagePassed(uint256 indexed nonce, address indexed sender, address indexed target, uint256 value, uint256 gasLimit, bytes data, bytes32 withdrawalHash)",
-]);
-
-export const l2Erc721BridgeAbi = parseAbi([
-  "function bridgeERC721To(address localToken, address remoteToken, address to, uint256 tokenId, uint32 minGasLimit, bytes extraData)",
 ]);
 
 export type DuskEvmReadContractClient = {

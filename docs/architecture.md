@@ -10,7 +10,7 @@ The initial package is a single TypeScript package with internal modules:
 - `envelope`: self-describing SDK delivery-envelope codecs and diagnostics.
 - `l1`: Dusk L1 submission interfaces, gas resolution, wait helpers, and
   wallet/client adapters.
-- `l2`: DuskEVM viem chain definitions, EVM client helpers, and minimal ABI
+- `l2`: DuskEVM viem chain definitions, EVM client helpers, and generated ABI
   bindings for standard token and OP bridge calls.
 - `bridge`: cross-layer operation intent helpers, Dusk bridge transaction
   builders, and status metadata.
@@ -63,9 +63,17 @@ The SDK does not choose a dispute game, fetch `eth_getProof`, decide output-root
 validity, or resolve games. Those observations come from op-node/L2/Rusk
 integration code and are passed into the SDK's L1 request builders.
 
-The L2 binding layer currently packages minimal viem ABI constants and call
-builders. It does not yet consume generated artifact packages because the
-canonical contract artifacts are not published as an SDK dependency.
+The L2 OP bridge ABI constants are generated from the pinned
+`@eth-optimism/contracts-bedrock` forge artifacts. Refresh them with:
+
+```sh
+npm run generate:l2-abis
+```
+
+The generated file records artifact package version, artifact paths, and
+compiler versions so reviewers can tie the SDK binding surface back to the OP
+artifact source. `npm run check` reruns the generator and fails if the committed
+generated file is stale.
 
 ## Non-goals
 
