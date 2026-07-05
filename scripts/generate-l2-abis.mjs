@@ -114,7 +114,7 @@ export const opContractsBedrockArtifactSource = {
 ${generated
   .map(
     ({ exportName, abi }) =>
-      `export const ${exportName} = ${formatJson(abi)} as const satisfies Abi;`
+      `export const ${exportName}: Abi = ${formatJson(abi)} as const satisfies Abi;`
   )
   .join("\n\n")}
 `;

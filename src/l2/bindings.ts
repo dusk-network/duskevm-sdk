@@ -25,14 +25,14 @@ export const L2_TO_L1_MESSAGE_PASSER_ADDRESS =
 export const L2_LEGACY_ERC20_ETH_ADDRESS =
   "0xDeadDeAddeAddEAddeadDEaDDEAdDeaDDeAD0000" as const;
 
-export const erc20Abi = parseAbi([
+export const erc20Abi: Abi = parseAbi([
   "function allowance(address owner, address spender) view returns (uint256)",
   "function approve(address spender, uint256 amount) returns (bool)",
   "function balanceOf(address account) view returns (uint256)",
   "function transfer(address to, uint256 amount) returns (bool)",
 ]);
 
-export const erc721Abi = parseAbi([
+export const erc721Abi: Abi = parseAbi([
   "function approve(address to, uint256 tokenId)",
   "function getApproved(uint256 tokenId) view returns (address)",
   "function ownerOf(uint256 tokenId) view returns (address)",

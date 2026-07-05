@@ -1,4 +1,4 @@
-import { defineChain } from "viem";
+import { defineChain, type Chain } from "viem";
 
 export type DefineDuskEvmChainOptions = {
   id: number;
@@ -7,7 +7,7 @@ export type DefineDuskEvmChainOptions = {
   explorerUrl?: string;
 };
 
-export function defineDuskEvmChain(options: DefineDuskEvmChainOptions) {
+export function defineDuskEvmChain(options: DefineDuskEvmChainOptions): Chain {
   return defineChain({
     id: options.id,
     name: options.name,
@@ -32,14 +32,14 @@ export function defineDuskEvmChain(options: DefineDuskEvmChainOptions) {
   });
 }
 
-export const duskEvmMainnet = defineDuskEvmChain({
+export const duskEvmMainnet: Chain = defineDuskEvmChain({
   id: 744,
   name: "DuskEVM Mainnet",
   rpcUrl: "https://rpc.evm.dusk.network",
   explorerUrl: "https://explorer.evm.dusk.network",
 });
 
-export const duskEvmTestnet = defineDuskEvmChain({
+export const duskEvmTestnet: Chain = defineDuskEvmChain({
   id: 745,
   name: "DuskEVM Testnet",
   rpcUrl: "https://rpc.testnet.evm.dusk.network",

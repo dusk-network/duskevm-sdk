@@ -1,0 +1,25 @@
+{
+  "$schema": "https://jsr.io/schema/config-file.v1.json",
+  "name": "@dusk-network/duskevm-sdk",
+  "version": "0.1.0",
+  "exports": {
+    ".": "./src/index.ts",
+    "./bridge": "./src/bridge/index.ts",
+    "./envelope": "./src/envelope/index.ts",
+    "./l1": "./src/l1/index.ts",
+    "./l2": "./src/l2/index.ts",
+    "./status": "./src/status/index.ts"
+  },
+  "publish": {
+    "include": [
+      "LICENSE",
+      "README.md",
+      "docs/**/*.md",
+      "package.json",
+      "src/**/*.ts"
+    ],
+    "exclude": [
+      "src/**/*.test.ts"
+    ]
+  }
+}

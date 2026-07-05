@@ -25,7 +25,7 @@ export const opContractsBedrockArtifactSource = {
   ],
 } as const;
 
-export const l2StandardBridgeAbi = [
+export const l2StandardBridgeAbi: Abi = [
   {
     "type": "function",
     "name": "withdraw",
@@ -132,7 +132,7 @@ export const l2StandardBridgeAbi = [
   }
 ] as const satisfies Abi;
 
-export const l2Erc721BridgeAbi = [
+export const l2Erc721BridgeAbi: Abi = [
   {
     "type": "function",
     "name": "bridgeERC721To",
@@ -173,7 +173,7 @@ export const l2Erc721BridgeAbi = [
   }
 ] as const satisfies Abi;
 
-export const l2ToL1MessagePasserAbi = [
+export const l2ToL1MessagePasserAbi: Abi = [
   {
     "type": "function",
     "name": "initiateWithdrawal",

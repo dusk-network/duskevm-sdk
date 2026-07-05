@@ -33,7 +33,7 @@ import { normalizeUint32 } from "../uint32.js";
 import { normalizeUint256 } from "../uint256.js";
 import { createBridgeOperationId } from "./operation-id.js";
 
-export const MESSAGE_PASSED_EVENT_TOPIC = toEventSelector(
+export const MESSAGE_PASSED_EVENT_TOPIC: Hex = toEventSelector(
   "MessagePassed(uint256,address,address,uint256,uint256,bytes,bytes32)"
 );
 
@@ -329,13 +329,13 @@ export function parseMessagePassedLog(log: EvmLogLike): ParsedWithdrawalMessage 
   }
   if (!log.data) throw sdkError("INVALID_OPERATION", "MessagePassed log is missing data");
 
-  let decoded: ReturnType<typeof decodeEventLog>;
+  let decoded: { eventName: string; args: unknown };
   try {
     decoded = decodeEventLog({
       abi: l2ToL1MessagePasserAbi,
       data: log.data,
       topics: topics as [Hex, ...Hex[]],
-    });
+    }) as { eventName: string; args: unknown };
   } catch (error) {
     throw sdkError("INVALID_OPERATION", "MessagePassed log could not be decoded", error);
   }

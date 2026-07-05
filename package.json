@@ -1,9 +1,9 @@
 {
   "name": "@dusk-network/duskevm-sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "TypeScript SDK helpers for DuskEVM bridge workflows and diagnostics",
   "type": "module",
-  "license": "MIT",
+  "license": "MPL-2.0",
   "author": "Dusk Network",
   "repository": {
     "type": "git",
@@ -50,6 +50,7 @@
   "scripts": {
     "build": "tsup",
     "check": "npm run check:l2-abis && npm run typecheck && npm run test && npm run build",
+    "check:jsr": "npx jsr publish --dry-run",
     "check:l2-abis": "npm run generate:l2-abis && git diff --exit-code -- src/l2/op-abis.ts",
     "generate:l2-abis": "node scripts/generate-l2-abis.mjs",
     "prepack": "npm run build",
