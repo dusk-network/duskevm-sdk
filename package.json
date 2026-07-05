@@ -1,0 +1,70 @@
+{
+  "name": "@dusk-network/duskevm-sdk",
+  "version": "0.0.0",
+  "description": "TypeScript SDK helpers for DuskEVM bridge workflows and diagnostics",
+  "type": "module",
+  "license": "MIT",
+  "author": "Dusk Network",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dusk-network/duskevm-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dusk-network/duskevm-sdk/issues"
+  },
+  "homepage": "https://github.com/dusk-network/duskevm-sdk#readme",
+  "files": [
+    "dist",
+    "README.md",
+    "docs"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./bridge": {
+      "types": "./dist/bridge/index.d.ts",
+      "import": "./dist/bridge/index.js"
+    },
+    "./envelope": {
+      "types": "./dist/envelope/index.d.ts",
+      "import": "./dist/envelope/index.js"
+    },
+    "./l1": {
+      "types": "./dist/l1/index.d.ts",
+      "import": "./dist/l1/index.js"
+    },
+    "./l2": {
+      "types": "./dist/l2/index.d.ts",
+      "import": "./dist/l2/index.js"
+    },
+    "./status": {
+      "types": "./dist/status/index.d.ts",
+      "import": "./dist/status/index.js"
+    }
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "check": "npm run typecheck && npm run test && npm run build",
+    "prepack": "npm run build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit --pretty false"
+  },
+  "dependencies": {
+    "viem": "^2.54.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.4"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
