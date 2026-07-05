@@ -16,6 +16,8 @@ DuskEVM adapter, op-node, Rusk, or wallet software.
 - DuskEVM L2 chain/client helpers and viem ABI bindings.
 - Cross-layer operation status primitives with resumable metadata.
 - Bridge intent and submission helpers for native, DRC20, and DRC721 deposits.
+- Withdrawal helpers for native, DRC20, and DRC721 L2 initiation calls,
+  `MessagePassed` receipt parsing, and L1 prove/finalize transaction requests.
 - Pluggable transaction builders, plus default builders for the DuskEVM bridge
   contract entrypoints.
 
@@ -58,6 +60,50 @@ const submitted = await bridge.submitNativeDeposit({
 console.log(duskEvmTestnet.id, submitted.submittedTransaction.transactionHash);
 ```
 
+## Withdrawal Shape
+
+Withdrawals are OP-style multi-stage operations. The SDK prepares the L2 call,
+parses the `MessagePassed` receipt, and builds Dusk L1 portal requests for
+prove/finalize. It does not select dispute games or synthesize withdrawal
+proofs; those come from op-node/L2/Rusk observations.
+
+```ts
+import {
+  buildFinalizeWithdrawalTransaction,
+  buildProveWithdrawalTransaction,
+  parseMessagePassedReceipt,
+  prepareNativeWithdrawal,
+} from "@dusk-network/duskevm-sdk";
+
+const withdrawal = prepareNativeWithdrawal({
+  amountWei: 1_000_000_000_000_000_000n,
+  recipient: "0x1111111111111111111111111111111111111111",
+  extraData: "0x",
+});
+
+await walletClient.sendTransaction({
+  account,
+  to: withdrawal.l2Transaction.to,
+  data: withdrawal.l2Transaction.data,
+  value: withdrawal.l2Transaction.value,
+});
+
+const message = parseMessagePassedReceipt(l2Receipt);
+
+const prove = buildProveWithdrawalTransaction({
+  portalContractId: "optimism-portal-contract-id",
+  withdrawal: message.withdrawal,
+  disputeGameIndex,
+  outputRootProof,
+  withdrawalProof,
+});
+
+const finalize = buildFinalizeWithdrawalTransaction({
+  portalContractId: "optimism-portal-contract-id",
+  withdrawal: message.withdrawal,
+});
+```
+
 ## Boundary
 
 The SDK should:
@@ -68,10 +114,12 @@ The SDK should:
 - decode and structurally validate SDK delivery envelopes for user/tooling diagnostics.
 - keep default gas prices for normal Dusk L1 calls node-derived or explicit,
   not deployment-priced by default.
+- expose withdrawal stages without hiding the OP prove/finalize lifecycle.
 
 The SDK should not:
 
 - synthesize adapter runtime state;
+- select dispute games or manufacture withdrawal proofs;
 - canonicalize Dusk L1 data;
 - hide OP-style bridge stages;
 - assume one browser wallet or one node implementation.

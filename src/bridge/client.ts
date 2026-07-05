@@ -8,13 +8,22 @@ import {
 } from "../l1/index.js";
 import type { BridgeOperationStatus } from "../status/index.js";
 import type { EvmAddress, JsonValue } from "../types.js";
-import { keccak256, stringToHex } from "viem";
 import { normalizeDuskContractIdHex } from "./extradata.js";
 import { createBridgeL1TransactionBuilder } from "./l1-builder.js";
+import { createBridgeOperationId } from "./operation-id.js";
 import {
   submittedBridgeOperationStatus,
   waitForBridgeOperationStatus,
 } from "./status.js";
+import {
+  prepareDrc20Withdrawal,
+  prepareDrc721Withdrawal,
+  prepareNativeWithdrawal,
+  type Drc20WithdrawalParams,
+  type Drc721WithdrawalParams,
+  type NativeWithdrawalParams,
+  type PreparedWithdrawalOperation,
+} from "./withdrawal.js";
 import type {
   CreateBridgeClientOptions,
   Drc20DepositParams,
@@ -29,6 +38,9 @@ export type BridgeClient = {
   prepareNativeDeposit(params: NativeDepositParams): PreparedBridgeOperation;
   prepareDrc20Deposit(params: Drc20DepositParams): PreparedBridgeOperation;
   prepareDrc721Deposit(params: Drc721DepositParams): PreparedBridgeOperation;
+  prepareNativeWithdrawal(params: NativeWithdrawalParams): PreparedWithdrawalOperation;
+  prepareDrc20Withdrawal(params: Drc20WithdrawalParams): PreparedWithdrawalOperation;
+  prepareDrc721Withdrawal(params: Drc721WithdrawalParams): PreparedWithdrawalOperation;
   buildL1Transaction(operation: PreparedBridgeOperation): Promise<DuskL1TransactionRequest>;
   submitPreparedOperation(operation: PreparedBridgeOperation): Promise<DuskL1SubmittedTransaction>;
   submitNativeDeposit(params: NativeDepositParams): Promise<SubmittedBridgeOperation>;
@@ -99,6 +111,9 @@ export function createBridgeClient(options: CreateBridgeClientOptions = {}): Bri
         metadata: params.metadata,
       });
     },
+    prepareNativeWithdrawal,
+    prepareDrc20Withdrawal,
+    prepareDrc721Withdrawal,
     async buildL1Transaction(operation) {
       const l1Transaction =
         operation.l1Transaction ?? (await defaultL1TransactionBuilder?.(operation));
@@ -160,7 +175,7 @@ function prepareDeposit(input: DepositInput): PreparedBridgeOperation {
   const gas = depositGas(input);
 
   return {
-    id: operationId("deposit", asset, l2Recipient, envelopeHex),
+    id: depositOperationId(asset, l2Recipient, envelopeHex),
     direction: "l1-to-l2",
     asset,
     envelopeHex,
@@ -223,26 +238,22 @@ async function submitBridgeOperation(
   return submittedOperation;
 }
 
-function operationId(
-  prefix: string,
+function depositOperationId(
   asset: PreparedBridgeOperation["asset"],
   recipient: string,
   envelopeHex: `0x${string}`
 ): string {
-  return `${prefix}:${keccak256(
-    stringToHex(JSON.stringify(operationIdPayload(prefix, asset, recipient, envelopeHex)))
-  )}`;
+  return createBridgeOperationId("deposit", depositOperationIdPayload(asset, recipient, envelopeHex));
 }
 
-function operationIdPayload(
-  prefix: string,
+function depositOperationIdPayload(
   asset: PreparedBridgeOperation["asset"],
   recipient: string,
   envelopeHex: `0x${string}`
 ): JsonValue {
   const base = {
     envelopeHex,
-    prefix,
+    prefix: "deposit",
     recipient: recipient.toLowerCase(),
   };
 

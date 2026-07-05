@@ -79,15 +79,100 @@ console.log(receipt.finalized);
 ## Build an L2 Withdrawal Call
 
 ```ts
-import { encodeL2WithdrawalCall } from "@dusk-network/duskevm-sdk/l2";
+import { prepareNativeWithdrawal } from "@dusk-network/duskevm-sdk";
 
-const call = encodeL2WithdrawalCall({
-  l2Token: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+const withdrawal = prepareNativeWithdrawal({
+  amountWei: 1_000_000_000_000_000_000n,
   recipient: "0x1111111111111111111111111111111111111111",
-  amount: 1_000_000_000n,
-  minGasLimit: 200_000,
   extraData: "0x",
 });
 
-console.log(call.to, call.data);
+console.log(withdrawal.l2Transaction.to, withdrawal.l2Transaction.data);
 ```
+
+## Prepare DRC20 and DRC721 Withdrawals
+
+```ts
+import {
+  prepareDrc20Withdrawal,
+  prepareDrc721Withdrawal,
+} from "@dusk-network/duskevm-sdk";
+
+const drc20Withdrawal = prepareDrc20Withdrawal({
+  l2Token: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  amount: 1_000_000_000n,
+  recipient: "0x1111111111111111111111111111111111111111",
+  delivery: {
+    target: { kind: "bls", value: "recipient-bls-public-key" },
+    payload: "0x",
+  },
+});
+
+const drc721Withdrawal = prepareDrc721Withdrawal({
+  l1Token: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  l2Token: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  tokenId: 7n,
+  recipient: "0x1111111111111111111111111111111111111111",
+  extraData: "0x",
+});
+```
+
+DRC721 withdrawals use the L2 ERC721 bridge predeploy. Native and DRC20
+withdrawals use the L2 standard bridge.
+
+## Parse a Withdrawal Message and Build L1 Requests
+
+```ts
+import {
+  buildFinalizeWithdrawalTransaction,
+  buildProveWithdrawalTransaction,
+  parseMessagePassedReceipt,
+} from "@dusk-network/duskevm-sdk";
+
+const message = parseMessagePassedReceipt(l2Receipt);
+
+const proveRequest = buildProveWithdrawalTransaction({
+  portalContractId: "optimism-portal-contract-id",
+  withdrawal: message.withdrawal,
+  disputeGameIndex,
+  outputRootProof,
+  withdrawalProof,
+  gasLimit: 1_000_000n,
+});
+
+const finalizeRequest = buildFinalizeWithdrawalTransaction({
+  portalContractId: "optimism-portal-contract-id",
+  withdrawal: message.withdrawal,
+  gasLimit: 40_000_000n,
+});
+
+await l1.submitTransaction(proveRequest);
+await l1.submitTransaction(finalizeRequest);
+```
+
+The SDK validates the `MessagePassed` withdrawal hash against the decoded event
+payload. It does not decide which dispute game is valid or fetch storage proofs;
+pass those observations in from your op-node/L2/Rusk integration.
+
+## Track Withdrawal Status
+
+```ts
+import { withdrawalLifecycleStatus } from "@dusk-network/duskevm-sdk";
+
+const status = withdrawalLifecycleStatus({
+  operation: withdrawal,
+  message,
+  proof: {
+    disputeGameIndex,
+    outputRootProof,
+    withdrawalProof,
+  },
+});
+
+console.log(status.phase, status.metadata.stage);
+```
+
+The status helper is resumable: pass persisted operation IDs, L2 transaction
+hashes, parsed messages, prove receipts, and finalize receipts as they become
+available. Stages remain explicit, for example `proof_not_ready`,
+`prove_ready`, `finalize_not_ready`, and `finalized`.
