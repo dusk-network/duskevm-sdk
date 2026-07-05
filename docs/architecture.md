@@ -8,9 +8,12 @@ part of consensus, adapter derivation, or OP-node execution.
 The initial package is a single TypeScript package with internal modules:
 
 - `envelope`: self-describing SDK delivery-envelope codecs and diagnostics.
-- `l1`: Dusk L1 submission interfaces and wallet/client adapters.
-- `l2`: DuskEVM viem chain definitions and EVM client helpers.
-- `bridge`: cross-layer operation intent helpers.
+- `l1`: Dusk L1 submission interfaces, gas resolution, wait helpers, and
+  wallet/client adapters.
+- `l2`: DuskEVM viem chain definitions, EVM client helpers, and minimal ABI
+  bindings for standard token and OP bridge calls.
+- `bridge`: cross-layer operation intent helpers, Dusk bridge transaction
+  builders, and status metadata.
 - `status`: polling and resumable operation status primitives.
 
 Keeping one package first avoids premature publishing overhead. The public
@@ -32,10 +35,21 @@ lighter installs.
 
 The SDK prepares explicit bridge operation intents. Intent IDs are derived from
 canonical operation data with a hash so user-controlled string fields cannot
-collide through delimiter tricks. A deployment-specific transaction builder
-converts those intents into actual Dusk L1 or EVM L2 calls. This avoids guessing
-contract method names in the SDK while still giving apps a single shape to
-validate, persist, submit, and track.
+collide through delimiter tricks. The SDK ships default builders for the
+current DuskEVM L1 bridge entrypoints:
+
+- native deposits use `depositETHToWithValue`;
+- DRC20 deposits use `bridgeERC20To`;
+- DRC721 deposits use `bridgeERC721To`;
+- DRC token deposits prefix `extraData` with the Dusk registry tag and 32-byte
+  contract id before appending the SDK delivery envelope.
+
+Applications can still inject a deployment-specific transaction builder when a
+local setup uses different contract ids, gas limits, or call routing.
+
+The L2 binding layer currently packages minimal viem ABI constants and call
+builders. It does not yet consume generated artifact packages because the
+canonical contract artifacts are not published as an SDK dependency.
 
 ## Non-goals
 

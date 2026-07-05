@@ -11,11 +11,13 @@ DuskEVM adapter, op-node, Rusk, or wallet software.
 ## Current Scope
 
 - Self-describing SDK delivery-envelope encode/decode diagnostics.
-- Dusk L1 client interfaces and a Dusk Connect-compatible wallet adapter.
-- DuskEVM L2 chain/client helpers built on viem.
-- Cross-layer operation status primitives.
-- Bridge intent helpers for native, DRC20, and DRC721 deposits.
-- Pluggable transaction builders for real deployment-specific contract calls.
+- Dusk L1 client interfaces, submit/wait helpers, and a Dusk Connect-compatible
+  wallet adapter.
+- DuskEVM L2 chain/client helpers and viem ABI bindings.
+- Cross-layer operation status primitives with resumable metadata.
+- Bridge intent and submission helpers for native, DRC20, and DRC721 deposits.
+- Pluggable transaction builders, plus default builders for the DuskEVM bridge
+  contract entrypoints.
 
 ## Install
 
@@ -40,25 +42,20 @@ const l1 = createDuskConnectL1Client(duskWallet);
 
 const bridge = createBridgeClient({
   l1,
-  buildL1Transaction(operation) {
-    return {
-      kind: "contract_call",
-      contractId: "bridge-contract-id",
-      method: "deposit",
-      args: operation,
-      gasLimit: 10_000_000n,
-    };
+  contracts: {
+    l1StandardBridgeContractId: "standard-bridge-contract-id",
+  },
+  gas: {
+    l1GasLimit: 900_000n,
   },
 });
 
-const prepared = bridge.prepareNativeDeposit({
+const submitted = await bridge.submitNativeDeposit({
   amountLux: parseDuskToLux("10"),
   l2Recipient: "0x1111111111111111111111111111111111111111",
 });
 
-const submitted = await bridge.submitPreparedOperation(prepared);
-
-console.log(duskEvmTestnet.id, submitted.transactionHash);
+console.log(duskEvmTestnet.id, submitted.submittedTransaction.transactionHash);
 ```
 
 ## Boundary
@@ -69,6 +66,8 @@ The SDK should:
 - adapt Dusk Connect or W3sper-like clients through interfaces;
 - expose explicit operation metadata that applications can persist and resume;
 - decode and structurally validate SDK delivery envelopes for user/tooling diagnostics.
+- keep default gas prices for normal Dusk L1 calls node-derived or explicit,
+  not deployment-priced by default.
 
 The SDK should not:
 
