@@ -4,6 +4,7 @@ export type { Hex };
 
 export type DuskAddress = string;
 export type DuskContractId = string;
+export type DrcRegistryContractId = Hex;
 export type EvmAddress = `0x${string}`;
 export type LuxAmount = bigint;
 export type TransactionHash = string;
