@@ -16,7 +16,9 @@
   "files": [
     "dist",
     "README.md",
-    "docs"
+    "docs",
+    "scripts/local-bridge-smoke.mjs",
+    "scripts/local-smoke-command.mjs"
   ],
   "exports": {
     ".": {
@@ -49,6 +51,8 @@
     "build": "tsup",
     "check": "npm run typecheck && npm run test && npm run build",
     "prepack": "npm run build",
+    "smoke:local": "npm run build && node scripts/local-bridge-smoke.mjs",
+    "smoke:local:dry-run": "npm run build && node scripts/local-bridge-smoke.mjs --dry-run",
     "test": "vitest run",
     "typecheck": "tsc --noEmit --pretty false"
   },

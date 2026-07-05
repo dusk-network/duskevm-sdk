@@ -28,6 +28,7 @@ The package is not published yet. During development:
 ```sh
 npm install
 npm run check
+npm run smoke:local:dry-run
 ```
 
 ## Quickstart
@@ -125,4 +126,5 @@ The SDK should not:
 - assume one browser wallet or one node implementation.
 
 See [docs/architecture.md](docs/architecture.md) for the initial package
-boundaries and follow-up work.
+boundaries and follow-up work. See [docs/local-smoke.md](docs/local-smoke.md)
+for the optional local Rusk + DuskEVM SDK smoke harness.
