@@ -47,6 +47,22 @@ current DuskEVM L1 bridge entrypoints:
 Applications can still inject a deployment-specific transaction builder when a
 local setup uses different contract ids, gas limits, or call routing.
 
+Withdrawals are deliberately modeled as a staged lifecycle instead of a single
+helper that hides the protocol boundary:
+
+- native withdrawals prepare an L2 standard-bridge `withdrawTo` call with the
+  legacy ETH token marker and matching transaction value;
+- DRC20 withdrawals prepare an L2 standard-bridge `withdrawTo` call;
+- DRC721 withdrawals prepare an L2 ERC721 bridge `bridgeERC721To` call;
+- `MessagePassed` receipt parsing verifies the emitted withdrawal hash against
+  the decoded withdrawal payload;
+- L1 prove/finalize builders produce Dusk contract-call requests for the
+  OptimismPortal2 entrypoints.
+
+The SDK does not choose a dispute game, fetch `eth_getProof`, decide output-root
+validity, or resolve games. Those observations come from op-node/L2/Rusk
+integration code and are passed into the SDK's L1 request builders.
+
 The L2 binding layer currently packages minimal viem ABI constants and call
 builders. It does not yet consume generated artifact packages because the
 canonical contract artifacts are not published as an SDK dependency.

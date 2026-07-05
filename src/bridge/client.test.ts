@@ -1,3 +1,4 @@
+import { keccak256, stringToHex } from "viem";
 import { createBridgeClient } from "./client.js";
 
 const DRC20_ID = `0x${"ab".repeat(32)}` as const;
@@ -19,6 +20,21 @@ describe("bridge client", () => {
       kind: "evm",
       value: "0x1111111111111111111111111111111111111111",
     });
+    expect(prepared.id).toBe(
+      `deposit:${keccak256(
+        stringToHex(
+          JSON.stringify({
+            envelopeHex: prepared.envelopeHex,
+            prefix: "deposit",
+            recipient: "0x1111111111111111111111111111111111111111",
+            asset: {
+              kind: "native",
+              amountLux: "10",
+            },
+          })
+        )
+      )}`
+    );
   });
 
   it("submits through an injected L1 transaction builder", async () => {

@@ -1,9 +1,15 @@
 import { decodeFunctionData, toFunctionSelector } from "viem";
 import {
+  L2_ERC721_BRIDGE_ADDRESS,
+  L2_LEGACY_ERC20_ETH_ADDRESS,
   L2_STANDARD_BRIDGE_ADDRESS,
   createDuskEvmContractBinding,
+  encodeL2Drc20WithdrawalCall,
+  encodeL2Drc721WithdrawalCall,
+  encodeL2NativeWithdrawalCall,
   encodeL2WithdrawalCall,
   erc20Abi,
+  l2Erc721BridgeAbi,
   l2StandardBridgeAbi,
 } from "./bindings.js";
 
@@ -80,6 +86,68 @@ describe("DuskEVM L2 bindings", () => {
     });
   });
 
+  it("builds native and token withdrawal calls for the correct bridge predeploys", () => {
+    const native = encodeL2NativeWithdrawalCall({
+      recipient: "0x4444444444444444444444444444444444444444",
+      amountWei: 10n,
+      minGasLimit: 200_000,
+      extraData: "0xabcd",
+    });
+    const drc20 = encodeL2Drc20WithdrawalCall({
+      l2Token: "0x3333333333333333333333333333333333333333",
+      recipient: "0x4444444444444444444444444444444444444444",
+      amount: 10n,
+      minGasLimit: 200_000,
+      extraData: "0xabcd",
+    });
+    const drc721 = encodeL2Drc721WithdrawalCall({
+      l1Token: "0x2222222222222222222222222222222222222222",
+      l2Token: "0x3333333333333333333333333333333333333333",
+      recipient: "0x4444444444444444444444444444444444444444",
+      tokenId: 7n,
+      minGasLimit: 200_000,
+      extraData: "0xabcd",
+    });
+
+    expect(native.to).toBe(L2_STANDARD_BRIDGE_ADDRESS);
+    expect(native.value).toBe(10n);
+    expect(decodeFunctionData({ abi: l2StandardBridgeAbi, data: native.data })).toEqual({
+      functionName: "withdrawTo",
+      args: [
+        L2_LEGACY_ERC20_ETH_ADDRESS,
+        "0x4444444444444444444444444444444444444444",
+        10n,
+        200_000,
+        "0xabcd",
+      ],
+    });
+
+    expect(drc20.to).toBe(L2_STANDARD_BRIDGE_ADDRESS);
+    expect(decodeFunctionData({ abi: l2StandardBridgeAbi, data: drc20.data })).toEqual({
+      functionName: "withdrawTo",
+      args: [
+        "0x3333333333333333333333333333333333333333",
+        "0x4444444444444444444444444444444444444444",
+        10n,
+        200_000,
+        "0xabcd",
+      ],
+    });
+
+    expect(drc721.to).toBe(L2_ERC721_BRIDGE_ADDRESS);
+    expect(decodeFunctionData({ abi: l2Erc721BridgeAbi, data: drc721.data })).toEqual({
+      functionName: "bridgeERC721To",
+      args: [
+        "0x3333333333333333333333333333333333333333",
+        "0x2222222222222222222222222222222222222222",
+        "0x4444444444444444444444444444444444444444",
+        7n,
+        200_000,
+        "0xabcd",
+      ],
+    });
+  });
+
   it("rejects L2 withdrawal min gas values outside uint32", () => {
     expect(() =>
       encodeL2WithdrawalCall({
@@ -88,5 +156,56 @@ describe("DuskEVM L2 bindings", () => {
         minGasLimit: 0x1_0000_0000,
       })
     ).toThrow(/minGasLimit must be a uint32/);
+
+    expect(() =>
+      encodeL2Drc721WithdrawalCall({
+        l1Token: "0x2222222222222222222222222222222222222222",
+        l2Token: "0x3333333333333333333333333333333333333333",
+        recipient: "0x4444444444444444444444444444444444444444",
+        tokenId: 7n,
+        minGasLimit: -1,
+      })
+    ).toThrow(/minGasLimit must be a uint32/);
+  });
+
+  it("rejects invalid DRC721 withdrawal token IDs as SDK operation errors", () => {
+    expectDrc721TokenIdError("abc", /tokenId must be a uint256 value/);
+    expectDrc721TokenIdError(1n << 256n, /tokenId does not fit uint256/);
+  });
+
+  it("rejects L2 withdrawal amounts outside uint256", () => {
+    expect(() =>
+      encodeL2NativeWithdrawalCall({
+        recipient: "0x4444444444444444444444444444444444444444",
+        amountWei: -1n,
+        minGasLimit: 200_000,
+      })
+    ).toThrow(/native withdrawal amount does not fit uint256/);
+
+    expect(() =>
+      encodeL2Drc20WithdrawalCall({
+        l2Token: "0x3333333333333333333333333333333333333333",
+        recipient: "0x4444444444444444444444444444444444444444",
+        amount: 1n << 256n,
+        minGasLimit: 200_000,
+      })
+    ).toThrow(/DRC20 withdrawal amount does not fit uint256/);
   });
 });
+
+function expectDrc721TokenIdError(tokenId: string | bigint, message: RegExp): void {
+  const build = () =>
+    encodeL2Drc721WithdrawalCall({
+      l1Token: "0x2222222222222222222222222222222222222222",
+      l2Token: "0x3333333333333333333333333333333333333333",
+      recipient: "0x4444444444444444444444444444444444444444",
+      tokenId,
+      minGasLimit: 200_000,
+    });
+  expect(build).toThrow(message);
+  try {
+    build();
+  } catch (error) {
+    expect(error).toMatchObject({ code: "INVALID_OPERATION" });
+  }
+}
