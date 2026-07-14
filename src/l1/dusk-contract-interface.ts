@@ -1,12 +1,14 @@
 // Generated from the public Dusk L1 SDK interface.
 // Do not edit manually; run npm run import:l1-interface -- <artifact-path>.
 
+/** Source revision and digest for the imported public Dusk L1 interface. */
 export const duskL1ContractInterfaceSource = {
   "schemaVersion": 1,
   "revision": "b39613569e35e03e1d7f9937ce6bb4e838a797ef",
   "interfaceDigestSha256": "98ccf77cf5be61b4dc9d297fb6a13a90058f0dc0922d30daeffb729a0a27cab4"
 } as const;
 
+/** Public bridge recipient wire-format constants owned by the L1 contracts. */
 export const duskL1WireFormats = {
   "bridgeAssetRecipientV1": {
     "tag": 2,
@@ -23,6 +25,7 @@ export const duskL1WireFormats = {
   }
 } as const;
 
+/** Allowlisted Dusk L1 method signatures used by this SDK. */
 export const duskL1ContractMethods = {
   "l1StandardBridge": {
     "depositETHToWithValue": {

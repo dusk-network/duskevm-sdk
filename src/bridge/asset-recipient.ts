@@ -6,9 +6,12 @@ import { duskL1WireFormats } from "../l1/dusk-contract-interface.js";
 const assetFormat = duskL1WireFormats.bridgeAssetRecipientV1;
 const nativeCreditFormat = duskL1WireFormats.nativeContractCreditV1;
 
+/** Byte length of a compressed Dusk BLS public key. */
 export const DUSK_COMPRESSED_BLS_PUBLIC_KEY_BYTES = 96;
-export const DUSK_RAW_BLS_PUBLIC_KEY_BYTES = assetFormat.rawPublicKeyBytes;
-export const DUSK_EXTERNAL_ASSET_RECIPIENT_BYTES =
+/** Byte length of the raw BLS key encoded in a bridge recipient. */
+export const DUSK_RAW_BLS_PUBLIC_KEY_BYTES: number = assetFormat.rawPublicKeyBytes;
+/** Total byte length of a version-one external bridge recipient. */
+export const DUSK_EXTERNAL_ASSET_RECIPIENT_BYTES: number =
   3 + DUSK_RAW_BLS_PUBLIC_KEY_BYTES;
 
 const BLS12_381_FP_MODULUS = BigInt(
@@ -21,8 +24,10 @@ const BLS12_381_MONTGOMERY_R_INVERSE = BigInt(
 const FP_RAW_BYTES = 48;
 const UINT64_MASK = (1n << 64n) - 1n;
 
+/** Hexadecimal or byte-array representation of a Dusk public key. */
 export type DuskPublicKeyBytes = Hex | Uint8Array;
 
+/** Convert a canonical compressed Dusk BLS public key to raw affine coordinates. */
 export function compressedDuskBlsPublicKeyToRaw(
   accountPublicKey: DuskPublicKeyBytes
 ): Uint8Array {
@@ -55,6 +60,7 @@ export function compressedDuskBlsPublicKeyToRaw(
   return raw;
 }
 
+/** Encode an external Dusk account as canonical bridge recipient metadata. */
 export function encodeDuskExternalAssetRecipient(
   accountPublicKey: DuskPublicKeyBytes
 ): Hex {
@@ -67,6 +73,7 @@ export function encodeDuskExternalAssetRecipient(
   );
 }
 
+/** Encode a Dusk contract identifier as canonical asset-recipient metadata. */
 export function encodeDuskContractAssetRecipient(contractId: Hex): Hex {
   const id = normalizeContractId(contractId, assetFormat.contractIdBytes);
   return bytesToHex(
@@ -77,6 +84,7 @@ export function encodeDuskContractAssetRecipient(contractId: Hex): Hex {
   );
 }
 
+/** Encode a Dusk contract identifier for a native-token contract credit. */
 export function encodeDuskNativeContractCredit(
   contractId: Hex,
   payload: Hex = "0x"
@@ -88,6 +96,7 @@ export function encodeDuskNativeContractCredit(
   );
 }
 
+/** Validate and normalize a raw Dusk BLS public key. */
 export function validateRawDuskBlsPublicKey(
   accountPublicKey: DuskPublicKeyBytes
 ): Uint8Array {
@@ -122,6 +131,7 @@ export function validateRawDuskBlsPublicKey(
   return raw;
 }
 
+/** Validate canonical external-account or contract asset-recipient metadata. */
 export function validateDuskAssetRecipient(extraData: Hex): Hex {
   const bytes = normalizeHex(extraData, "Dusk asset recipient");
   if (bytes[0] !== assetFormat.tag || bytes[1] !== assetFormat.version) {
@@ -140,6 +150,7 @@ export function validateDuskAssetRecipient(extraData: Hex): Hex {
   return bytesToHex(bytes);
 }
 
+/** Validate canonical native contract-credit metadata. */
 export function validateDuskNativeContractCredit(extraData: Hex): Hex {
   const bytes = normalizeHex(extraData, "Dusk native contract credit");
   const headerLength = 2 + nativeCreditFormat.contractIdBytes;
@@ -154,6 +165,7 @@ export function validateDuskNativeContractCredit(extraData: Hex): Hex {
   return bytesToHex(bytes);
 }
 
+/** Validate recipient metadata accepted by native withdrawals. */
 export function validateDuskNativeWithdrawalRecipient(extraData: Hex): Hex {
   const bytes = normalizeHex(extraData, "Dusk native withdrawal recipient");
   if (bytes[0] === nativeCreditFormat.tag) {

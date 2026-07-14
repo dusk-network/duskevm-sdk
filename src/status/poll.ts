@@ -2,6 +2,7 @@ import { sdkError } from "../errors.js";
 import type { Abortable } from "../types.js";
 import { isTerminalOperationPhase, type BridgeOperationStatus } from "./types.js";
 
+/** Configuration for polling an externally observed operation. */
 export type PollOperationStatusOptions<TMetadata> = Abortable & {
   observe(): Promise<BridgeOperationStatus<TMetadata>>;
   intervalMs?: number;
@@ -10,6 +11,7 @@ export type PollOperationStatusOptions<TMetadata> = Abortable & {
   now?: () => number;
 };
 
+/** Poll an observer until it reports a terminal phase or the timeout expires. */
 export async function pollOperationStatus<TMetadata = unknown>(
   options: PollOperationStatusOptions<TMetadata>
 ): Promise<BridgeOperationStatus<TMetadata>> {

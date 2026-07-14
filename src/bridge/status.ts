@@ -7,6 +7,7 @@ import type {
   WaitForBridgeOperationStatusOptions,
 } from "./types.js";
 
+/** Persistable metadata used to correlate a bridge operation across layers. */
 export type BridgeTrackingMetadata = Record<string, JsonValue> & {
   operationId: string;
   direction: PreparedBridgeOperation["direction"];
@@ -17,6 +18,7 @@ export type BridgeTrackingMetadata = Record<string, JsonValue> & {
   l2BlockNumber?: string;
 };
 
+/** Build tracking metadata from a prepared operation and optional L1 hash. */
 export function bridgeOperationTrackingMetadata(
   operation: PreparedBridgeOperation,
   metadata: Record<string, JsonValue> = {}
@@ -29,6 +31,7 @@ export function bridgeOperationTrackingMetadata(
   };
 }
 
+/** Build the initial submitted status for a Dusk L1 bridge operation. */
 export function submittedBridgeOperationStatus(
   operation: PreparedBridgeOperation,
   submittedTransaction: DuskL1SubmittedTransaction
@@ -43,6 +46,7 @@ export function submittedBridgeOperationStatus(
   };
 }
 
+/** Poll a bridge-specific observer until it reaches a terminal phase. */
 export async function waitForBridgeOperationStatus<TMetadata extends Record<string, JsonValue>>(
   operation: PreparedBridgeOperation,
   observe: (

@@ -1,12 +1,12 @@
 # DuskEVM SDK
 
-TypeScript helpers for applications that need to coordinate Dusk L1 and
-DuskEVM L2 bridge workflows.
+`@dusk/evm-sdk` provides typed TypeScript helpers for applications that need to
+coordinate Dusk L1 and DuskEVM L2 bridge workflows.
 
-This package is an early, non-production SDK foundation. It deliberately stays
-thin: the SDK helps applications build, submit, and track cross-layer intents,
-but it does not decide canonical chain state and it does not replace the
-DuskEVM adapter, op-node, Rusk, or wallet software.
+The `0.1.0-beta.1` line is a prerelease intended for integration testing. The
+SDK deliberately stays thin: it helps applications build, submit, and track
+cross-layer intents, but it does not decide canonical chain state and it does
+not replace the DuskEVM adapter, op-node, Rusk, or wallet software.
 
 ## Current Scope
 
@@ -31,13 +31,26 @@ callers and intentionally do not apply those bridge-specific checks.
 
 ## Install
 
-The package is not published yet. During development:
+The prerelease is prepared but is not yet available from npm. Once registry
+publication is complete, install it from npm or JSR:
 
 ```sh
-npm install
+npm install @dusk/evm-sdk@beta
+deno add jsr:@dusk/evm-sdk@0.1.0-beta.1
+```
+
+For repository development:
+
+```sh
+npm ci
 npm run check
 npm run smoke:local:dry-run
 ```
+
+Supported targets are Node.js 22 and 24, Deno 2, and modern browsers using ESM.
+The packed npm artifact is tested through every export path and a Vite browser
+bundle. Bun and Cloudflare Workers remain unclaimed until they have dedicated
+compatibility coverage.
 
 ## Quickstart
 
@@ -47,7 +60,7 @@ import {
   createDuskConnectL1Client,
   duskEvmTestnet,
   parseDuskToLux,
-} from "@dusk-network/duskevm-sdk";
+} from "@dusk/evm-sdk";
 
 const l1 = createDuskConnectL1Client(duskWallet);
 
@@ -83,7 +96,7 @@ import {
   encodeDuskExternalAssetRecipient,
   parseMessagePassedReceipt,
   prepareNativeWithdrawal,
-} from "@dusk-network/duskevm-sdk";
+} from "@dusk/evm-sdk";
 
 const duskRecipient = encodeDuskExternalAssetRecipient(compressedDuskPublicKey);
 
@@ -136,6 +149,15 @@ The SDK should not:
 - hide OP-style bridge stages;
 - assume one browser wallet or one node implementation.
 
+## Entrypoints
+
+- `@dusk/evm-sdk`: complete public API.
+- `@dusk/evm-sdk/bridge`: deposit, withdrawal, and lifecycle helpers.
+- `@dusk/evm-sdk/envelope`: delivery-envelope codecs and diagnostics.
+- `@dusk/evm-sdk/l1`: Dusk transaction clients, gas, and confirmation helpers.
+- `@dusk/evm-sdk/l2`: DuskEVM chains, viem clients, ABIs, and raw call encoders.
+- `@dusk/evm-sdk/status`: generic operation polling and status types.
+
 ## Contract Interface Updates
 
 The private contracts repository produces an allowlisted public interface for
@@ -156,4 +178,5 @@ the public SDK CI validates the committed projection as normal source code.
 
 See [docs/architecture.md](docs/architecture.md) for the initial package
 boundaries and follow-up work. See [docs/local-smoke.md](docs/local-smoke.md)
-for the optional local Rusk + DuskEVM SDK smoke harness.
+for the optional local Rusk + DuskEVM SDK smoke harness. Maintainers should use
+[docs/releasing.md](docs/releasing.md) for the manual release process.

@@ -2,27 +2,34 @@ import {
   createPublicClient,
   custom,
   http,
-  type Chain,
-  type EIP1193Provider,
-  type PublicClient,
-  type Transport,
 } from "viem";
+import type {
+  DuskEvmChain,
+  DuskEvmEip1193Provider,
+  DuskEvmPublicClient,
+  DuskEvmTransport,
+} from "./types.js";
 
+/** Chain and transport inputs for a DuskEVM public client. */
 export type CreateDuskEvmPublicClientOptions = {
-  chain: Chain;
+  chain: DuskEvmChain;
   rpcUrl?: string;
-  transport?: Transport;
+  transport?: DuskEvmTransport;
 };
 
+/** Create a viem public client for a DuskEVM chain. */
 export function createDuskEvmPublicClient(
   options: CreateDuskEvmPublicClientOptions
-): PublicClient<Transport, Chain> {
+): DuskEvmPublicClient {
   return createPublicClient({
     chain: options.chain,
     transport: options.transport ?? http(options.rpcUrl),
-  }) as PublicClient<Transport, Chain>;
+  }) as DuskEvmPublicClient;
 }
 
-export function transportFromEip1193Provider(provider: EIP1193Provider): Transport {
+/** Wrap an injected EIP-1193 wallet provider as a viem transport. */
+export function transportFromEip1193Provider(
+  provider: DuskEvmEip1193Provider
+): DuskEvmTransport {
   return custom(provider);
 }

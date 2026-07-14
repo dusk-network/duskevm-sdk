@@ -1,3 +1,8 @@
+/**
+ * Dusk L1 transaction clients, gas resolution, submission, and wait helpers.
+ *
+ * @module
+ */
 export * from "./dusk-contract-interface.js";
 export * from "./dusk-connect.js";
 export * from "./gas.js";

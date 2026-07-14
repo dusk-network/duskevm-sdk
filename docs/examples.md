@@ -3,7 +3,7 @@
 ## Decode an SDK Delivery Envelope
 
 ```ts
-import { decodeDuskDeliveryEnvelope } from "@dusk-network/duskevm-sdk";
+import { decodeDuskDeliveryEnvelope } from "@dusk/evm-sdk";
 
 const decoded = decodeDuskDeliveryEnvelope("0x4445564d0104002a00000000...");
 console.log(decoded.target);
@@ -12,7 +12,7 @@ console.log(decoded.target);
 ## Prepare a Native Deposit
 
 ```ts
-import { createBridgeClient, parseDuskToLux } from "@dusk-network/duskevm-sdk";
+import { createBridgeClient, parseDuskToLux } from "@dusk/evm-sdk";
 
 const bridge = createBridgeClient({
   contracts: {
@@ -45,7 +45,7 @@ import {
   createBridgeClient,
   createDuskConnectL1Client,
   parseDuskToLux,
-} from "@dusk-network/duskevm-sdk";
+} from "@dusk/evm-sdk";
 
 const l1 = createDuskConnectL1Client(duskWallet);
 const bridge = createBridgeClient({
@@ -67,7 +67,7 @@ console.log(submitted.transactionHash);
 ## Wait for a Dusk L1 Transaction
 
 ```ts
-import { waitForDuskL1Transaction } from "@dusk-network/duskevm-sdk/l1";
+import { waitForDuskL1Transaction } from "@dusk/evm-sdk/l1";
 
 const receipt = await waitForDuskL1Transaction(l1, submitted.transactionHash, {
   timeoutMs: 120_000,
@@ -82,7 +82,7 @@ console.log(receipt.finalized);
 import {
   encodeDuskExternalAssetRecipient,
   prepareNativeWithdrawal,
-} from "@dusk-network/duskevm-sdk";
+} from "@dusk/evm-sdk";
 
 const duskRecipient = encodeDuskExternalAssetRecipient(compressedDuskPublicKey);
 
@@ -101,7 +101,7 @@ console.log(withdrawal.l2Transaction.to, withdrawal.l2Transaction.data);
 import {
   prepareDrc20Withdrawal,
   prepareDrc721Withdrawal,
-} from "@dusk-network/duskevm-sdk";
+} from "@dusk/evm-sdk";
 
 const drc20Withdrawal = prepareDrc20Withdrawal({
   l2Token: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -129,7 +129,7 @@ import {
   buildFinalizeWithdrawalTransaction,
   buildProveWithdrawalTransaction,
   parseMessagePassedReceipt,
-} from "@dusk-network/duskevm-sdk";
+} from "@dusk/evm-sdk";
 
 const message = parseMessagePassedReceipt(l2Receipt);
 
@@ -159,7 +159,7 @@ pass those observations in from your op-node/L2/Rusk integration.
 ## Track Withdrawal Status
 
 ```ts
-import { withdrawalLifecycleStatus } from "@dusk-network/duskevm-sdk";
+import { withdrawalLifecycleStatus } from "@dusk/evm-sdk";
 
 const status = withdrawalLifecycleStatus({
   operation: withdrawal,

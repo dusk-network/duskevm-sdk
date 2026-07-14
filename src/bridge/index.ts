@@ -1,3 +1,8 @@
+/**
+ * Deposit, withdrawal, recipient-encoding, and bridge lifecycle helpers.
+ *
+ * @module
+ */
 export * from "./asset-recipient.js";
 export * from "./client.js";
 export * from "./extradata.js";

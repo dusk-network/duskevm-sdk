@@ -103,14 +103,17 @@ const selectedContracts = selectRequiredMethods(artifact);
 const output = `// Generated from the public Dusk L1 SDK interface.
 // Do not edit manually; run npm run import:l1-interface -- <artifact-path>.
 
+/** Source revision and digest for the imported public Dusk L1 interface. */
 export const duskL1ContractInterfaceSource = ${formatJson({
   schemaVersion: artifact.schemaVersion,
   revision: artifact.source.revision,
   interfaceDigestSha256: artifact.source.interfaceDigestSha256,
 })} as const;
 
+/** Public bridge recipient wire-format constants owned by the L1 contracts. */
 export const duskL1WireFormats = ${formatJson(artifact.wireFormats)} as const;
 
+/** Allowlisted Dusk L1 method signatures used by this SDK. */
 export const duskL1ContractMethods = ${formatJson(selectedContracts)} as const;
 `;
 

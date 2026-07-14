@@ -1,16 +1,19 @@
 import { createBridgeClient, type BridgeClient, type CreateBridgeClientOptions } from "./bridge/index.js";
 import type { DuskL1Client } from "./l1/index.js";
 
+/** Dependencies used by the composed SDK facade. */
 export type DuskEvmSdkOptions<TL2Client = unknown> = CreateBridgeClientOptions & {
   l2?: TL2Client;
 };
 
+/** Composed bridge and optional L2 clients returned by {@link createDuskEvmSdk}. */
 export type DuskEvmSdk<TL2Client = unknown> = {
   bridge: BridgeClient;
   l1?: DuskL1Client;
   l2?: TL2Client;
 };
 
+/** Create a small facade that groups bridge helpers with an optional L2 client. */
 export function createDuskEvmSdk<TL2Client = unknown>(
   options: DuskEvmSdkOptions<TL2Client> = {}
 ): DuskEvmSdk<TL2Client> {
