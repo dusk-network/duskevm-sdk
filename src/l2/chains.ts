@@ -1,5 +1,7 @@
-import { defineChain, type Chain } from "viem";
+import { defineChain } from "viem";
+import type { DuskEvmChain } from "./types.js";
 
+/** Inputs used to define a DuskEVM-compatible viem chain. */
 export type DefineDuskEvmChainOptions = {
   id: number;
   name: string;
@@ -7,7 +9,8 @@ export type DefineDuskEvmChainOptions = {
   explorerUrl?: string;
 };
 
-export function defineDuskEvmChain(options: DefineDuskEvmChainOptions): Chain {
+/** Define a DuskEVM viem chain from deployment endpoints. */
+export function defineDuskEvmChain(options: DefineDuskEvmChainOptions): DuskEvmChain {
   return defineChain({
     id: options.id,
     name: options.name,
@@ -32,14 +35,16 @@ export function defineDuskEvmChain(options: DefineDuskEvmChainOptions): Chain {
   });
 }
 
-export const duskEvmMainnet: Chain = defineDuskEvmChain({
+/** Canonical DuskEVM mainnet chain definition. */
+export const duskEvmMainnet: DuskEvmChain = defineDuskEvmChain({
   id: 744,
   name: "DuskEVM Mainnet",
   rpcUrl: "https://rpc.evm.dusk.network",
   explorerUrl: "https://explorer.evm.dusk.network",
 });
 
-export const duskEvmTestnet: Chain = defineDuskEvmChain({
+/** Canonical DuskEVM testnet chain definition. */
+export const duskEvmTestnet: DuskEvmChain = defineDuskEvmChain({
   id: 745,
   name: "DuskEVM Testnet",
   rpcUrl: "https://rpc.testnet.evm.dusk.network",

@@ -34,6 +34,7 @@ import type {
   WaitForBridgeOperationStatusOptions,
 } from "./types.js";
 
+/** High-level bridge preparation, submission, and status client. */
 export type BridgeClient = {
   prepareNativeDeposit(params: NativeDepositParams): PreparedBridgeOperation;
   prepareDrc20Deposit(params: Drc20DepositParams): PreparedBridgeOperation;
@@ -55,6 +56,7 @@ export type BridgeClient = {
   ): Promise<BridgeOperationStatus<Record<string, JsonValue>>>;
 };
 
+/** Create a bridge client from optional Dusk L1 and status-observer adapters. */
 export function createBridgeClient(options: CreateBridgeClientOptions = {}): BridgeClient {
   const defaultL1TransactionBuilder =
     options.buildL1Transaction ??

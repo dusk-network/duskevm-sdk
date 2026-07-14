@@ -1,7 +1,6 @@
 import {
   encodeFunctionData,
   parseAbi,
-  type Abi,
   type EncodeFunctionDataParameters,
   type Hex,
 } from "viem";
@@ -9,6 +8,7 @@ import type { EvmAddress } from "../types.js";
 import { normalizeUint32 } from "../uint32.js";
 import { normalizeUint256 } from "../uint256.js";
 import { l2Erc721BridgeAbi, l2StandardBridgeAbi } from "./op-abis.js";
+import type { DuskEvmAbi } from "./types.js";
 export {
   l2Erc721BridgeAbi,
   l2StandardBridgeAbi,
@@ -16,45 +16,54 @@ export {
   opContractsBedrockArtifactSource,
 } from "./op-abis.js";
 
+/** OP L2 standard bridge predeploy address. */
 export const L2_STANDARD_BRIDGE_ADDRESS =
   "0x4200000000000000000000000000000000000010" as const;
+/** OP L2 ERC721 bridge predeploy address. */
 export const L2_ERC721_BRIDGE_ADDRESS =
   "0x4200000000000000000000000000000000000014" as const;
+/** OP L2-to-L1 message passer predeploy address. */
 export const L2_TO_L1_MESSAGE_PASSER_ADDRESS =
   "0x4200000000000000000000000000000000000016" as const;
+/** OP legacy token marker used for native-asset withdrawals. */
 export const L2_LEGACY_ERC20_ETH_ADDRESS =
   "0xDeadDeAddeAddEAddeadDEaDDEAdDeaDDeAD0000" as const;
 
-export const erc20Abi: Abi = parseAbi([
+/** Minimal ERC20 ABI used by wallet integrations. */
+export const erc20Abi: DuskEvmAbi = parseAbi([
   "function allowance(address owner, address spender) view returns (uint256)",
   "function approve(address spender, uint256 amount) returns (bool)",
   "function balanceOf(address account) view returns (uint256)",
   "function transfer(address to, uint256 amount) returns (bool)",
 ]);
 
-export const erc721Abi: Abi = parseAbi([
+/** Minimal ERC721 ABI used by wallet integrations. */
+export const erc721Abi: DuskEvmAbi = parseAbi([
   "function approve(address to, uint256 tokenId)",
   "function getApproved(uint256 tokenId) view returns (address)",
   "function ownerOf(uint256 tokenId) view returns (address)",
   "function safeTransferFrom(address from, address to, uint256 tokenId)",
 ]);
 
+/** Minimal read-contract client accepted by contract bindings. */
 export type DuskEvmReadContractClient = {
   readContract(parameters: {
     address: EvmAddress;
-    abi: Abi;
+    abi: DuskEvmAbi;
     functionName: string;
     args?: readonly unknown[];
   }): Promise<unknown>;
 };
 
+/** Encoded EVM transaction fields ready for wallet submission. */
 export type DuskEvmPreparedCall = {
   to: EvmAddress;
   data: Hex;
   value?: bigint;
 };
 
-export type DuskEvmContractBinding<TAbi extends Abi = Abi> = {
+/** Small read-and-encode facade around one EVM contract. */
+export type DuskEvmContractBinding<TAbi extends DuskEvmAbi = DuskEvmAbi> = {
   address: EvmAddress;
   abi: TAbi;
   read(functionName: string, args?: readonly unknown[]): Promise<unknown>;
@@ -62,7 +71,8 @@ export type DuskEvmContractBinding<TAbi extends Abi = Abi> = {
   call(functionName: string, args?: readonly unknown[], options?: { value?: bigint }): DuskEvmPreparedCall;
 };
 
-export function createDuskEvmContractBinding<TAbi extends Abi>(options: {
+/** Create a typed contract binding backed by a read client. */
+export function createDuskEvmContractBinding<TAbi extends DuskEvmAbi>(options: {
   client: DuskEvmReadContractClient;
   address: EvmAddress;
   abi: TAbi;
@@ -73,7 +83,7 @@ export function createDuskEvmContractBinding<TAbi extends Abi>(options: {
     read(functionName, args) {
       const parameters: {
         address: EvmAddress;
-        abi: Abi;
+        abi: DuskEvmAbi;
         functionName: string;
         args?: readonly unknown[];
       } = {
@@ -98,8 +108,12 @@ export function createDuskEvmContractBinding<TAbi extends Abi>(options: {
   };
 }
 
-function encodeContractCall(abi: Abi, functionName: string, args?: readonly unknown[]): Hex {
-  const parameters: EncodeFunctionDataParameters<Abi> = {
+function encodeContractCall(
+  abi: DuskEvmAbi,
+  functionName: string,
+  args?: readonly unknown[]
+): Hex {
+  const parameters: EncodeFunctionDataParameters<DuskEvmAbi> = {
     abi,
     functionName,
   };
@@ -107,6 +121,7 @@ function encodeContractCall(abi: Abi, functionName: string, args?: readonly unkn
   return encodeFunctionData(parameters);
 }
 
+/** Inputs for the raw OP standard-bridge withdrawal encoder. */
 export type EncodeL2WithdrawalCallOptions = {
   bridgeAddress?: EvmAddress;
   l2Token: EvmAddress;
@@ -116,6 +131,7 @@ export type EncodeL2WithdrawalCallOptions = {
   recipient?: EvmAddress;
 };
 
+/** Encode a raw OP standard-bridge withdrawal call. */
 export function encodeL2WithdrawalCall(options: EncodeL2WithdrawalCallOptions): DuskEvmPreparedCall {
   const bridgeAddress = options.bridgeAddress ?? L2_STANDARD_BRIDGE_ADDRESS;
   const minGasLimit = normalizeUint32(options.minGasLimit, "L2 minGasLimit");
@@ -147,6 +163,7 @@ export function encodeL2WithdrawalCall(options: EncodeL2WithdrawalCallOptions): 
   };
 }
 
+/** Inputs for a raw native OP standard-bridge withdrawal call. */
 export type EncodeL2NativeWithdrawalCallOptions = {
   bridgeAddress?: EvmAddress;
   recipient: EvmAddress;
@@ -155,6 +172,7 @@ export type EncodeL2NativeWithdrawalCallOptions = {
   extraData?: Hex;
 };
 
+/** Encode a raw native withdrawal call and matching transaction value. */
 export function encodeL2NativeWithdrawalCall(
   options: EncodeL2NativeWithdrawalCallOptions
 ): DuskEvmPreparedCall {
@@ -173,6 +191,7 @@ export function encodeL2NativeWithdrawalCall(
   };
 }
 
+/** Inputs for a raw DRC20 OP standard-bridge withdrawal call. */
 export type EncodeL2Drc20WithdrawalCallOptions = {
   bridgeAddress?: EvmAddress;
   l2Token: EvmAddress;
@@ -182,6 +201,7 @@ export type EncodeL2Drc20WithdrawalCallOptions = {
   extraData?: Hex;
 };
 
+/** Encode a raw DRC20 withdrawal call. */
 export function encodeL2Drc20WithdrawalCall(
   options: EncodeL2Drc20WithdrawalCallOptions
 ): DuskEvmPreparedCall {
@@ -196,6 +216,7 @@ export function encodeL2Drc20WithdrawalCall(
   return encodeL2WithdrawalCall(callOptions);
 }
 
+/** Inputs for a raw DRC721 OP bridge withdrawal call. */
 export type EncodeL2Drc721WithdrawalCallOptions = {
   bridgeAddress?: EvmAddress;
   l1Token: EvmAddress;
@@ -206,6 +227,7 @@ export type EncodeL2Drc721WithdrawalCallOptions = {
   extraData?: Hex;
 };
 
+/** Encode a raw DRC721 withdrawal call. */
 export function encodeL2Drc721WithdrawalCall(
   options: EncodeL2Drc721WithdrawalCallOptions
 ): DuskEvmPreparedCall {

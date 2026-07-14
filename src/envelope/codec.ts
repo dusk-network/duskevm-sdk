@@ -31,6 +31,7 @@ const CODE_TO_TARGET: Record<number, DeliveryTargetKind | undefined> = {
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
+/** Encode a version-one self-describing Dusk delivery envelope. */
 export function encodeDuskDeliveryEnvelope(options: EncodeDuskDeliveryEnvelopeOptions): Hex {
   const targetCode = TARGET_TO_CODE[options.target.kind];
   if (targetCode === undefined) {
@@ -54,6 +55,7 @@ export function encodeDuskDeliveryEnvelope(options: EncodeDuskDeliveryEnvelopeOp
   return bytesToHex(out);
 }
 
+/** Decode and validate a Dusk delivery envelope. */
 export function decodeDuskDeliveryEnvelope(input: Hex | Uint8Array): DuskDeliveryEnvelope {
   const diagnostic = inspectDuskDeliveryEnvelope(input);
   if (!diagnostic.ok) {
@@ -62,6 +64,7 @@ export function decodeDuskDeliveryEnvelope(input: Hex | Uint8Array): DuskDeliver
   return diagnostic.envelope;
 }
 
+/** Inspect an envelope without throwing for malformed input. */
 export function inspectDuskDeliveryEnvelope(input: Hex | Uint8Array): DeliveryEnvelopeDiagnostic {
   const raw = input instanceof Uint8Array ? input : hexToBytes(input);
   const rawHex = bytesToHex(raw);

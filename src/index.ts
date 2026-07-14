@@ -1,3 +1,8 @@
+/**
+ * Typed helpers for Dusk L1 and DuskEVM bridge applications.
+ *
+ * @module
+ */
 export * from "./amount.js";
 export * from "./bridge/index.js";
 export * from "./envelope/index.js";

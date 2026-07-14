@@ -11,14 +11,17 @@ import type {
   PreparedBridgeOperation,
 } from "./types.js";
 
+/** Default minimum L2 gas forwarded by bridge deposit requests. */
 export const DEFAULT_BRIDGE_MIN_GAS_LIMIT = 200_000;
 
+/** Create a reusable Dusk L1 transaction builder for bridge deposits. */
 export function createBridgeL1TransactionBuilder(
   options: CreateBridgeL1TransactionBuilderOptions
 ): BridgeTransactionBuilder {
   return (operation) => buildBridgeL1Transaction(operation, options);
 }
 
+/** Build the Dusk L1 contract call for a prepared bridge deposit. */
 export function buildBridgeL1Transaction(
   operation: PreparedBridgeOperation,
   options: CreateBridgeL1TransactionBuilderOptions

@@ -8,6 +8,7 @@ import type {
   WaitForDuskTransactionOptions,
 } from "./types.js";
 
+/** Minimal Dusk Connect-compatible wallet API consumed by the SDK. */
 export type DuskConnectLikeWallet = {
   sendTransaction(request: Record<string, unknown>): Promise<unknown>;
   getGasPrice?(options?: { maxTransactions?: number }): Promise<unknown>;
@@ -17,10 +18,12 @@ export type DuskConnectLikeWallet = {
   ): Promise<unknown>;
 };
 
+/** Options used to adapt a Dusk Connect-compatible wallet. */
 export type CreateDuskConnectL1ClientOptions = {
   maxGasPriceTransactions?: number;
 };
 
+/** Adapt a Dusk Connect-compatible wallet to the SDK's L1 client interface. */
 export function createDuskConnectL1Client(
   wallet: DuskConnectLikeWallet,
   options: CreateDuskConnectL1ClientOptions = {}

@@ -34,12 +34,15 @@ import {
 } from "./asset-recipient.js";
 import { createBridgeOperationId } from "./operation-id.js";
 
+/** Event topic emitted by the OP L2-to-L1 message passer. */
 export const MESSAGE_PASSED_EVENT_TOPIC: Hex = toEventSelector(
   "MessagePassed(uint256,address,address,uint256,uint256,bytes,bytes32)"
 );
 
+/** Default minimum L2 gas forwarded by withdrawal calls. */
 export const DEFAULT_WITHDRAWAL_MIN_GAS_LIMIT = 200_000;
 
+/** Native, DRC20, and DRC721 assets supported by withdrawal helpers. */
 export type WithdrawalAsset =
   | {
       kind: "native";
@@ -58,11 +61,13 @@ export type WithdrawalAsset =
       tokenId: string | bigint;
     };
 
+/** Canonical Dusk recipient metadata shared by withdrawal inputs. */
 export type WithdrawalExtraDataParams = {
   /** Canonical Dusk recipient metadata consumed by the L1 bridge. */
   extraData: Hex;
 };
 
+/** Parameters shared by typed withdrawal preparation helpers. */
 export type WithdrawalBaseParams = WithdrawalExtraDataParams & {
   /** OP bridge recipient used in the L2 withdrawal call. */
   recipient: EvmAddress;
@@ -70,22 +75,26 @@ export type WithdrawalBaseParams = WithdrawalExtraDataParams & {
   metadata?: Record<string, JsonValue>;
 };
 
+/** Parameters for initiating a native DUSK withdrawal on L2. */
 export type NativeWithdrawalParams = WithdrawalBaseParams & {
   amountWei: bigint;
 };
 
+/** Parameters for initiating a DRC20 withdrawal on L2. */
 export type Drc20WithdrawalParams = WithdrawalBaseParams & {
   l1Token?: EvmAddress;
   l2Token: EvmAddress;
   amount: bigint;
 };
 
+/** Parameters for initiating a DRC721 withdrawal on L2. */
 export type Drc721WithdrawalParams = WithdrawalBaseParams & {
   l1Token: EvmAddress;
   l2Token: EvmAddress;
   tokenId: string | bigint;
 };
 
+/** Persistable withdrawal intent and its prepared L2 transaction. */
 export type PreparedWithdrawalOperation = {
   id: string;
   direction: "l2-to-l1";
@@ -97,6 +106,7 @@ export type PreparedWithdrawalOperation = {
   metadata: Record<string, JsonValue>;
 };
 
+/** OP withdrawal transaction encoded by the message passer. */
 export type WithdrawalTransaction = {
   nonce: bigint;
   sender: EvmAddress;
@@ -106,6 +116,7 @@ export type WithdrawalTransaction = {
   data: Hex;
 };
 
+/** String-encoded withdrawal transaction accepted by Dusk L1 contract calls. */
 export type EncodedWithdrawalTransaction = {
   nonce: Hex;
   sender: EvmAddress;
@@ -115,6 +126,7 @@ export type EncodedWithdrawalTransaction = {
   data: Hex;
 };
 
+/** OP output-root proof fields. */
 export type OutputRootProof = {
   version: Hex;
   stateRoot: Hex;
@@ -122,6 +134,7 @@ export type OutputRootProof = {
   latestBlockhash: Hex;
 };
 
+/** String-encoded output-root proof accepted by Dusk L1 contract calls. */
 export type EncodedOutputRootProof = {
   version: Hex;
   state_root: Hex;
@@ -129,12 +142,14 @@ export type EncodedOutputRootProof = {
   latest_blockhash: Hex;
 };
 
+/** Dispute game and storage proof data needed to prove a withdrawal. */
 export type WithdrawalProofData = {
   disputeGameIndex: bigint | number | string;
   outputRootProof: OutputRootProof;
   withdrawalProof: readonly Hex[];
 };
 
+/** Verified `MessagePassed` event decoded from an L2 receipt. */
 export type ParsedWithdrawalMessage = {
   withdrawal: WithdrawalTransaction;
   withdrawalHash: Hex;
@@ -143,6 +158,7 @@ export type ParsedWithdrawalMessage = {
   logIndex?: number;
 };
 
+/** Minimal EVM log shape consumed by withdrawal receipt parsing. */
 export type EvmLogLike = {
   address?: string | null;
   topics?: readonly Hex[] | null;
@@ -152,12 +168,14 @@ export type EvmLogLike = {
   logIndex?: bigint | number | string | null;
 };
 
+/** Minimal EVM receipt shape consumed by withdrawal receipt parsing. */
 export type EvmReceiptLike = {
   logs?: readonly EvmLogLike[] | null;
   blockNumber?: bigint | number | string | null;
   transactionHash?: string | null;
 };
 
+/** Parameters for building a Dusk L1 prove-withdrawal request. */
 export type BuildProveWithdrawalTransactionParams = WithdrawalProofData & {
   portalContractId: string;
   withdrawal: WithdrawalTransaction;
@@ -166,6 +184,7 @@ export type BuildProveWithdrawalTransactionParams = WithdrawalProofData & {
   metadata?: Record<string, JsonValue>;
 };
 
+/** Parameters for building a Dusk L1 finalize-withdrawal request. */
 export type BuildFinalizeWithdrawalTransactionParams = {
   portalContractId: string;
   withdrawal: WithdrawalTransaction;
@@ -175,6 +194,7 @@ export type BuildFinalizeWithdrawalTransactionParams = {
   metadata?: Record<string, JsonValue>;
 };
 
+/** Explicit stages in the OP withdrawal lifecycle. */
 export type WithdrawalLifecycleStage =
   | "l2_not_submitted"
   | "message_not_observed"
@@ -188,6 +208,7 @@ export type WithdrawalLifecycleStage =
   | "finalized"
   | "failed";
 
+/** Persistable metadata used to resume and display a withdrawal lifecycle. */
 export type WithdrawalTrackingMetadata = Record<string, JsonValue> & {
   stage: WithdrawalLifecycleStage;
   operationId?: string;
@@ -199,8 +220,10 @@ export type WithdrawalTrackingMetadata = Record<string, JsonValue> & {
   reason?: string;
 };
 
+/** Bridge operation status specialized with withdrawal tracking metadata. */
 export type WithdrawalLifecycleStatus = BridgeOperationStatus<WithdrawalTrackingMetadata>;
 
+/** Observations used to derive the current withdrawal lifecycle status. */
 export type WithdrawalLifecycleStatusInput = {
   operation?: PreparedWithdrawalOperation;
   l2TransactionHash?: TransactionHash;
@@ -225,6 +248,7 @@ type PreparedWithdrawalInput = {
   metadata?: Record<string, JsonValue>;
 };
 
+/** Prepare a native withdrawal call with validated Dusk recipient metadata. */
 export function prepareNativeWithdrawal(params: NativeWithdrawalParams): PreparedWithdrawalOperation {
   const extraData = withdrawalExtraData(params, "native");
   const minGasLimit = withdrawalMinGasLimit(params.minGasLimit);
@@ -250,6 +274,7 @@ export function prepareNativeWithdrawal(params: NativeWithdrawalParams): Prepare
   );
 }
 
+/** Prepare a DRC20 withdrawal call with validated Dusk recipient metadata. */
 export function prepareDrc20Withdrawal(params: Drc20WithdrawalParams): PreparedWithdrawalOperation {
   const extraData = withdrawalExtraData(params, "asset");
   const minGasLimit = withdrawalMinGasLimit(params.minGasLimit);
@@ -284,6 +309,7 @@ export function prepareDrc20Withdrawal(params: Drc20WithdrawalParams): PreparedW
   );
 }
 
+/** Prepare a DRC721 withdrawal call with validated Dusk recipient metadata. */
 export function prepareDrc721Withdrawal(params: Drc721WithdrawalParams): PreparedWithdrawalOperation {
   const extraData = withdrawalExtraData(params, "asset");
   const minGasLimit = withdrawalMinGasLimit(params.minGasLimit);
@@ -318,6 +344,7 @@ export function prepareDrc721Withdrawal(params: Drc721WithdrawalParams): Prepare
   );
 }
 
+/** Parse and verify a `MessagePassed` log, returning `undefined` for other logs. */
 export function parseMessagePassedLog(log: EvmLogLike): ParsedWithdrawalMessage | undefined {
   if (!log.address || !log.address.toLowerCase().startsWith("0x")) return undefined;
   if (log.address.toLowerCase() !== L2_TO_L1_MESSAGE_PASSER_ADDRESS.toLowerCase()) {
@@ -377,6 +404,7 @@ export function parseMessagePassedLog(log: EvmLogLike): ParsedWithdrawalMessage 
   return parsed;
 }
 
+/** Find and verify the single `MessagePassed` event in an L2 receipt. */
 export function parseMessagePassedReceipt(receipt: EvmReceiptLike): ParsedWithdrawalMessage {
   for (const log of receipt.logs ?? []) {
     const logWithReceiptFields: EvmLogLike = { ...log };
@@ -399,6 +427,7 @@ function normalizeWithdrawalTransaction(withdrawal: WithdrawalTransaction): With
   };
 }
 
+/** ABI-encode an OP withdrawal transaction tuple. */
 export function encodeWithdrawal(withdrawal: WithdrawalTransaction): Hex {
   const normalized = normalizeWithdrawalTransaction(withdrawal);
   return encodeAbiParameters(
@@ -421,10 +450,12 @@ export function encodeWithdrawal(withdrawal: WithdrawalTransaction): Hex {
   );
 }
 
+/** Compute the canonical OP withdrawal hash. */
 export function hashWithdrawal(withdrawal: WithdrawalTransaction): Hex {
   return normalizeBytes32(keccak256(encodeWithdrawal(withdrawal)), "withdrawal hash");
 }
 
+/** Serialize a withdrawal tuple for the Dusk L1 contract ABI. */
 export function serializeWithdrawalForDuskAbi(
   withdrawal: WithdrawalTransaction
 ): EncodedWithdrawalTransaction {
@@ -439,6 +470,7 @@ export function serializeWithdrawalForDuskAbi(
   };
 }
 
+/** Serialize an output-root proof for the Dusk L1 contract ABI. */
 export function serializeOutputRootProofForDuskAbi(
   proof: OutputRootProof
 ): EncodedOutputRootProof {
@@ -453,6 +485,7 @@ export function serializeOutputRootProofForDuskAbi(
   };
 }
 
+/** Build a Dusk L1 request that proves an OP withdrawal. */
 export function buildProveWithdrawalTransaction(
   params: BuildProveWithdrawalTransactionParams
 ): DuskL1TransactionRequest {
@@ -469,6 +502,7 @@ export function buildProveWithdrawalTransaction(
   return request;
 }
 
+/** Build a Dusk L1 request that finalizes a proven OP withdrawal. */
 export function buildFinalizeWithdrawalTransaction(
   params: BuildFinalizeWithdrawalTransactionParams
 ): DuskL1TransactionRequest {
@@ -486,6 +520,7 @@ export function buildFinalizeWithdrawalTransaction(
   );
 }
 
+/** Build and submit a prove-withdrawal request through a Dusk L1 client. */
 export async function submitProveWithdrawalTransaction(
   client: DuskL1Client,
   params: BuildProveWithdrawalTransactionParams,
@@ -494,6 +529,7 @@ export async function submitProveWithdrawalTransaction(
   return submitDuskL1Transaction(client, buildProveWithdrawalTransaction(params), options);
 }
 
+/** Build and submit a finalize-withdrawal request through a Dusk L1 client. */
 export async function submitFinalizeWithdrawalTransaction(
   client: DuskL1Client,
   params: BuildFinalizeWithdrawalTransactionParams,
@@ -502,6 +538,7 @@ export async function submitFinalizeWithdrawalTransaction(
   return submitDuskL1Transaction(client, buildFinalizeWithdrawalTransaction(params), options);
 }
 
+/** Derive an explicit, resumable withdrawal lifecycle status from observations. */
 export function withdrawalLifecycleStatus(
   input: WithdrawalLifecycleStatusInput
 ): WithdrawalLifecycleStatus {

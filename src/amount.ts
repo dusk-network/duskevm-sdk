@@ -1,8 +1,11 @@
 import { sdkError } from "./errors.js";
 
+/** Number of decimal places in one DUSK-denominated value. */
 export const LUX_DECIMALS = 9;
+/** Number of Lux in one DUSK. */
 export const LUX_PER_DUSK = 1_000_000_000n;
 
+/** Parse a non-negative decimal DUSK amount into integer Lux. */
 export function parseDuskToLux(value: string): bigint {
   const input = value.trim();
   if (!/^\d+(\.\d+)?$/.test(input)) {
@@ -19,6 +22,7 @@ export function parseDuskToLux(value: string): bigint {
   return whole * LUX_PER_DUSK + fractional;
 }
 
+/** Format an integer Lux amount as a decimal DUSK string. */
 export function formatLuxToDusk(value: bigint | number | string): string {
   const lux = toLux(value);
 
@@ -30,6 +34,7 @@ export function formatLuxToDusk(value: bigint | number | string): string {
   return `${whole}.${fractionalText}`;
 }
 
+/** Normalize a non-negative integer Lux input to `bigint`. */
 export function toLux(value: bigint | number | string): bigint {
   if (typeof value === "bigint") {
     if (value < 0n) throw sdkError("INVALID_AMOUNT", "Lux amount cannot be negative");

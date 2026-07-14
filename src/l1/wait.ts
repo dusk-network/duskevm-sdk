@@ -9,16 +9,19 @@ import type {
   WaitForDuskTransactionOptions,
 } from "./types.js";
 
+/** Gas overrides used while submitting a Dusk L1 request. */
 export type DuskL1SubmitOptions = Omit<ResolveDuskGasPriceOptions, "client"> & {
   wait?: boolean | WaitForDuskTransactionOptions;
 };
 
+/** Submitted Dusk request together with normalized request metadata. */
 export type SubmittedDuskL1Transaction = {
   submitted: DuskL1SubmittedTransaction;
   request: DuskL1TransactionRequest;
   receipt?: DuskL1TransactionReceipt;
 };
 
+/** Resolve gas and submit a Dusk L1 transaction request. */
 export async function submitDuskL1Transaction(
   client: DuskL1Client,
   request: DuskL1TransactionRequest,
@@ -42,6 +45,7 @@ export async function submitDuskL1Transaction(
   return result;
 }
 
+/** Wait for a submitted Dusk L1 transaction to finalize or fail. */
 export async function waitForDuskL1Transaction(
   client: Pick<DuskL1Client, "waitForTransaction">,
   transactionHash: TransactionHash,
