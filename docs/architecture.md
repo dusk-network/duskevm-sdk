@@ -16,9 +16,9 @@ The initial package is a single TypeScript package with internal modules:
   builders, and status metadata.
 - `status`: polling and resumable operation status primitives.
 
-Keeping one package first avoids premature publishing overhead. The public
-subpath exports keep the door open to split packages later if consumers need
-lighter installs.
+Keeping one package avoids premature publishing overhead. The public subpath
+exports keep the door open to split packages later if consumers need lighter
+installs. The canonical package name is `@dusk/evm-sdk` on npm and JSR.
 
 ## Dependency Choices
 
