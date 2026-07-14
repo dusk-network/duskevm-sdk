@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { stripVTControlCharacters } from "node:util";
 
 const result = spawnSync(
   "deno",
   ["doc", "--quiet", "--unstable-sloppy-imports", "--lint", "src/index.ts"],
-  { encoding: "utf8" }
+  {
+    encoding: "utf8",
+    env: { ...process.env, NO_COLOR: "1" },
+  }
 );
 
-const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+const output = stripVTControlCharacters(`${result.stdout ?? ""}${result.stderr ?? ""}`);
 
 if (result.error) throw result.error;
 
