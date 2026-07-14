@@ -79,12 +79,17 @@ console.log(receipt.finalized);
 ## Build an L2 Withdrawal Call
 
 ```ts
-import { prepareNativeWithdrawal } from "@dusk-network/duskevm-sdk";
+import {
+  encodeDuskExternalAssetRecipient,
+  prepareNativeWithdrawal,
+} from "@dusk-network/duskevm-sdk";
+
+const duskRecipient = encodeDuskExternalAssetRecipient(compressedDuskPublicKey);
 
 const withdrawal = prepareNativeWithdrawal({
   amountWei: 1_000_000_000_000_000_000n,
   recipient: "0x1111111111111111111111111111111111111111",
-  extraData: "0x",
+  extraData: duskRecipient,
 });
 
 console.log(withdrawal.l2Transaction.to, withdrawal.l2Transaction.data);
@@ -102,10 +107,7 @@ const drc20Withdrawal = prepareDrc20Withdrawal({
   l2Token: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   amount: 1_000_000_000n,
   recipient: "0x1111111111111111111111111111111111111111",
-  delivery: {
-    target: { kind: "bls", value: "recipient-bls-public-key" },
-    payload: "0x",
-  },
+  extraData: duskRecipient,
 });
 
 const drc721Withdrawal = prepareDrc721Withdrawal({
@@ -113,7 +115,7 @@ const drc721Withdrawal = prepareDrc721Withdrawal({
   l2Token: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   tokenId: 7n,
   recipient: "0x1111111111111111111111111111111111111111",
-  extraData: "0x",
+  extraData: duskRecipient,
 });
 ```
 

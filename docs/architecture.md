@@ -54,10 +54,25 @@ helper that hides the protocol boundary:
   legacy ETH token marker and matching transaction value;
 - DRC20 withdrawals prepare an L2 standard-bridge `withdrawTo` call;
 - DRC721 withdrawals prepare an L2 ERC721 bridge `bridgeERC721To` call;
+- asset withdrawals use the generated versioned Dusk recipient wire format
+  rather than unversioned account-key prefixes;
 - `MessagePassed` receipt parsing verifies the emitted withdrawal hash against
   the decoded withdrawal payload;
 - L1 prove/finalize builders produce Dusk contract-call requests for the
   OptimismPortal2 entrypoints.
+
+Generic Dusk delivery envelopes are not bridge asset-recipient metadata. DRC20
+and DRC721 withdrawals must use `encodeDuskExternalAssetRecipient` or
+`encodeDuskContractAssetRecipient`. Native withdrawals use the external-account
+format or the separate `encodeDuskNativeContractCredit` format for contract
+credits. The typed withdrawal helpers require and validate these formats before
+constructing L2 calldata.
+
+The exported `l2` encoding functions are lower-level OP ABI primitives. They
+deliberately preserve raw `extraData` access for advanced callers and do not
+enforce Dusk recipient semantics. Applications that want the SDK's canonical
+recipient checks should use `prepareNativeWithdrawal`, `prepareDrc20Withdrawal`,
+or `prepareDrc721Withdrawal` from the `bridge` surface.
 
 The SDK does not choose a dispute game, fetch `eth_getProof`, decide output-root
 validity, or resolve games. Those observations come from op-node/L2/Rusk

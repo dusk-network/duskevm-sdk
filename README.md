@@ -18,10 +18,16 @@ DuskEVM adapter, op-node, Rusk, or wallet software.
 - Bridge intent and submission helpers for native, DRC20, and DRC721 deposits.
 - Withdrawal helpers for native, DRC20, and DRC721 L2 initiation calls,
   `MessagePassed` receipt parsing, and L1 prove/finalize transaction requests.
+- Versioned Dusk asset-recipient and native contract-credit encoders for bridge
+  withdrawal `extraData`.
 - Pluggable transaction builders, plus default builders for the DuskEVM bridge
   contract entrypoints.
 - Generated Dusk L1 method metadata imported from the contracts project's
   narrow public interface.
+
+The `bridge` withdrawal helpers validate canonical Dusk recipient metadata.
+The lower-level `l2` encoding exports are raw OP ABI primitives for advanced
+callers and intentionally do not apply those bridge-specific checks.
 
 ## Install
 
@@ -74,14 +80,17 @@ proofs; those come from op-node/L2/Rusk observations.
 import {
   buildFinalizeWithdrawalTransaction,
   buildProveWithdrawalTransaction,
+  encodeDuskExternalAssetRecipient,
   parseMessagePassedReceipt,
   prepareNativeWithdrawal,
 } from "@dusk-network/duskevm-sdk";
 
+const duskRecipient = encodeDuskExternalAssetRecipient(compressedDuskPublicKey);
+
 const withdrawal = prepareNativeWithdrawal({
   amountWei: 1_000_000_000_000_000_000n,
   recipient: "0x1111111111111111111111111111111111111111",
-  extraData: "0x",
+  extraData: duskRecipient,
 });
 
 await walletClient.sendTransaction({

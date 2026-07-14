@@ -1,3 +1,4 @@
+export * from "./asset-recipient.js";
 export * from "./client.js";
 export * from "./extradata.js";
 export * from "./l1-builder.js";

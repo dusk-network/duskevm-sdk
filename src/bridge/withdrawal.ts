@@ -5,10 +5,6 @@ import {
   toEventSelector,
   type Hex,
 } from "viem";
-import {
-  encodeDuskDeliveryEnvelope,
-  type EncodeDuskDeliveryEnvelopeOptions,
-} from "../envelope/index.js";
 import { sdkError } from "../errors.js";
 import { normalizeEvmAddress } from "../evm-address.js";
 import { duskL1ContractMethods } from "../l1/dusk-contract-interface.js";
@@ -32,6 +28,10 @@ import type { BridgeOperationStatus } from "../status/index.js";
 import type { EvmAddress, JsonValue, TransactionHash } from "../types.js";
 import { normalizeUint32 } from "../uint32.js";
 import { normalizeUint256 } from "../uint256.js";
+import {
+  validateDuskAssetRecipient,
+  validateDuskNativeWithdrawalRecipient,
+} from "./asset-recipient.js";
 import { createBridgeOperationId } from "./operation-id.js";
 
 export const MESSAGE_PASSED_EVENT_TOPIC: Hex = toEventSelector(
@@ -59,12 +59,12 @@ export type WithdrawalAsset =
     };
 
 export type WithdrawalExtraDataParams = {
-  extraData?: Hex;
-  delivery?: EncodeDuskDeliveryEnvelopeOptions;
+  /** Canonical Dusk recipient metadata consumed by the L1 bridge. */
+  extraData: Hex;
 };
 
 export type WithdrawalBaseParams = WithdrawalExtraDataParams & {
-  /** OP bridge recipient used in the L2 withdrawal call; `delivery` only controls extraData. */
+  /** OP bridge recipient used in the L2 withdrawal call. */
   recipient: EvmAddress;
   minGasLimit?: number;
   metadata?: Record<string, JsonValue>;
@@ -226,7 +226,7 @@ type PreparedWithdrawalInput = {
 };
 
 export function prepareNativeWithdrawal(params: NativeWithdrawalParams): PreparedWithdrawalOperation {
-  const extraData = withdrawalExtraData(params);
+  const extraData = withdrawalExtraData(params, "native");
   const minGasLimit = withdrawalMinGasLimit(params.minGasLimit);
   const recipient = normalizeEvmAddress(params.recipient, "Withdrawal recipient");
   const amountWei = normalizeUint256(params.amountWei, "Withdrawal native amount");
@@ -251,7 +251,7 @@ export function prepareNativeWithdrawal(params: NativeWithdrawalParams): Prepare
 }
 
 export function prepareDrc20Withdrawal(params: Drc20WithdrawalParams): PreparedWithdrawalOperation {
-  const extraData = withdrawalExtraData(params);
+  const extraData = withdrawalExtraData(params, "asset");
   const minGasLimit = withdrawalMinGasLimit(params.minGasLimit);
   const recipient = normalizeEvmAddress(params.recipient, "Withdrawal recipient");
   const l2Token = normalizeEvmAddress(params.l2Token, "Withdrawal L2 token");
@@ -285,7 +285,7 @@ export function prepareDrc20Withdrawal(params: Drc20WithdrawalParams): PreparedW
 }
 
 export function prepareDrc721Withdrawal(params: Drc721WithdrawalParams): PreparedWithdrawalOperation {
-  const extraData = withdrawalExtraData(params);
+  const extraData = withdrawalExtraData(params, "asset");
   const minGasLimit = withdrawalMinGasLimit(params.minGasLimit);
   const recipient = normalizeEvmAddress(params.recipient, "Withdrawal recipient");
   const l1Token = normalizeEvmAddress(params.l1Token, "Withdrawal L1 token");
@@ -660,12 +660,22 @@ function withdrawalOperationIdPayload(
   }
 }
 
-function withdrawalExtraData(params: WithdrawalExtraDataParams): Hex {
-  if (params.extraData !== undefined && params.delivery !== undefined) {
-    throw sdkError("INVALID_OPERATION", "Use either withdrawal extraData or delivery, not both");
+function withdrawalExtraData(
+  params: WithdrawalExtraDataParams,
+  recipientKind: "asset" | "native"
+): Hex {
+  if ("delivery" in params) {
+    throw sdkError(
+      "INVALID_OPERATION",
+      "Withdrawal delivery envelopes are not supported; pass canonical Dusk recipient extraData"
+    );
   }
-  if (params.delivery) return encodeDuskDeliveryEnvelope(params.delivery);
-  return normalizeByteHex(params.extraData ?? "0x", "withdrawal extraData");
+  if (params.extraData === undefined) {
+    throw sdkError("INVALID_OPERATION", "Withdrawal recipient extraData is required");
+  }
+  return recipientKind === "native"
+    ? validateDuskNativeWithdrawalRecipient(params.extraData)
+    : validateDuskAssetRecipient(params.extraData);
 }
 
 function withdrawalMinGasLimit(value: number | undefined): number {
