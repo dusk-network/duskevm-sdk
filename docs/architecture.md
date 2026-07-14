@@ -63,6 +63,22 @@ The SDK does not choose a dispute game, fetch `eth_getProof`, decide output-root
 validity, or resolve games. Those observations come from op-node/L2/Rusk
 integration code and are passed into the SDK's L1 request builders.
 
+The L1 request method metadata is generated from an allowlisted public
+interface produced by the private contracts repository. The public SDK stores
+only the generated TypeScript projection. Import an artifact downloaded from
+the private CI workflow with:
+
+```sh
+npm run import:l1-interface -- /path/to/dusk-l1-public-interface.json
+```
+
+The importer verifies the artifact digest, rejects contracts or methods outside
+the expected public surface, validates exact method signatures and wire-format
+constants, and records the contracts revision and interface digest. The
+private repository owns source conformance and artifact publication; public
+SDK CI compiles and tests the committed projection without private-repository
+access.
+
 The L2 OP bridge ABI constants are generated from the pinned
 `@eth-optimism/contracts-bedrock` forge artifacts. Refresh them with:
 

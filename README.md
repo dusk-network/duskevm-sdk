@@ -20,6 +20,8 @@ DuskEVM adapter, op-node, Rusk, or wallet software.
   `MessagePassed` receipt parsing, and L1 prove/finalize transaction requests.
 - Pluggable transaction builders, plus default builders for the DuskEVM bridge
   contract entrypoints.
+- Generated Dusk L1 method metadata imported from the contracts project's
+  narrow public interface.
 
 ## Install
 
@@ -124,6 +126,24 @@ The SDK should not:
 - canonicalize Dusk L1 data;
 - hide OP-style bridge stages;
 - assume one browser wallet or one node implementation.
+
+## Contract Interface Updates
+
+The private contracts repository produces an allowlisted public interface for
+the SDK. The SDK commits only the generated TypeScript projection, not the
+source artifact or private contract metadata. Import an artifact downloaded
+from the contracts CI workflow with:
+
+```sh
+npm run import:l1-interface -- /path/to/dusk-l1-public-interface.json
+npm run check
+```
+
+The import verifies the artifact digest, exact contract allowlist, every L1
+method signature used by the SDK, and the public wire-format constants. The
+generated metadata records the source revision and interface digest. Source
+conformance and artifact publication remain owned by the private contracts CI;
+the public SDK CI validates the committed projection as normal source code.
 
 See [docs/architecture.md](docs/architecture.md) for the initial package
 boundaries and follow-up work. See [docs/local-smoke.md](docs/local-smoke.md)

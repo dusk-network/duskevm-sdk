@@ -1,4 +1,5 @@
 import { sdkError } from "../errors.js";
+import { duskL1ContractMethods } from "../l1/dusk-contract-interface.js";
 import type { DuskL1TransactionRequest } from "../l1/index.js";
 import type { JsonValue } from "../types.js";
 import { normalizeUint32 } from "../uint32.js";
@@ -29,7 +30,7 @@ export function buildBridgeL1Transaction(
       return {
         ...common,
         contractId: requireContractId(options.l1StandardBridgeContractId, "L1 standard bridge"),
-        method: "depositETHToWithValue",
+        method: duskL1ContractMethods.l1StandardBridge.depositETHToWithValue.name,
         amountLux: operation.asset.amountLux,
         args: [
           l2Recipient(operation),
@@ -42,14 +43,14 @@ export function buildBridgeL1Transaction(
       return {
         ...common,
         contractId: requireContractId(options.l1StandardBridgeContractId, "L1 standard bridge"),
-        method: "bridgeERC20To",
+        method: duskL1ContractMethods.l1StandardBridge.bridgeERC20To.name,
         args: tokenBridgeArgs(operation.asset, operation, options),
       };
     case "drc721":
       return {
         ...common,
         contractId: requireContractId(options.l1Erc721BridgeContractId, "L1 ERC721 bridge"),
-        method: "bridgeERC721To",
+        method: duskL1ContractMethods.l1Erc721Bridge.bridgeERC721To.name,
         args: tokenBridgeArgs(operation.asset, operation, options),
       };
   }

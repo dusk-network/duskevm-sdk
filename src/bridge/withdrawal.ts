@@ -11,6 +11,7 @@ import {
 } from "../envelope/index.js";
 import { sdkError } from "../errors.js";
 import { normalizeEvmAddress } from "../evm-address.js";
+import { duskL1ContractMethods } from "../l1/dusk-contract-interface.js";
 import {
   submitDuskL1Transaction,
   type DuskL1Client,
@@ -455,12 +456,16 @@ export function serializeOutputRootProofForDuskAbi(
 export function buildProveWithdrawalTransaction(
   params: BuildProveWithdrawalTransactionParams
 ): DuskL1TransactionRequest {
-  const request = withdrawalL1Request(params, "proveWithdrawalTransaction", [
-    serializeWithdrawalForDuskAbi(params.withdrawal),
-    toU256Hex(params.disputeGameIndex, "dispute game index"),
-    serializeOutputRootProofForDuskAbi(params.outputRootProof),
-    params.withdrawalProof.map((node) => normalizeByteHex(node, "withdrawal proof node")),
-  ]);
+  const request = withdrawalL1Request(
+    params,
+    duskL1ContractMethods.optimismPortal.proveWithdrawalTransaction.name,
+    [
+      serializeWithdrawalForDuskAbi(params.withdrawal),
+      toU256Hex(params.disputeGameIndex, "dispute game index"),
+      serializeOutputRootProofForDuskAbi(params.outputRootProof),
+      params.withdrawalProof.map((node) => normalizeByteHex(node, "withdrawal proof node")),
+    ]
+  );
   return request;
 }
 
@@ -475,8 +480,8 @@ export function buildFinalizeWithdrawalTransaction(
   return withdrawalL1Request(
     params,
     proofSubmitter
-      ? "finalizeWithdrawalTransactionExternalProof"
-      : "finalizeWithdrawalTransaction",
+      ? duskL1ContractMethods.optimismPortal.finalizeWithdrawalTransactionExternalProof.name
+      : duskL1ContractMethods.optimismPortal.finalizeWithdrawalTransaction.name,
     proofSubmitter ? [withdrawal, proofSubmitter] : [withdrawal]
   );
 }

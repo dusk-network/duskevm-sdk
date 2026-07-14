@@ -52,6 +52,7 @@
     "check": "npm run check:l2-abis && npm run typecheck && npm run test && npm run build",
     "check:jsr": "npx jsr publish --dry-run",
     "check:l2-abis": "npm run generate:l2-abis && git diff --exit-code -- src/l2/op-abis.ts",
+    "import:l1-interface": "node scripts/generate-l1-interface.mjs",
     "generate:l2-abis": "node scripts/generate-l2-abis.mjs",
     "prepack": "npm run build",
     "smoke:local": "npm run build && node scripts/local-bridge-smoke.mjs",
