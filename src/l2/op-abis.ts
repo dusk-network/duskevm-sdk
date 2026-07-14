@@ -30,6 +30,29 @@ export const opContractsBedrockArtifactSource = {
 export const l2StandardBridgeAbi: DuskEvmAbi = [
   {
     "type": "function",
+    "name": "bridgeETHTo",
+    "inputs": [
+      {
+        "name": "_to",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_minGasLimit",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "_extraData",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
     "name": "withdraw",
     "inputs": [
       {

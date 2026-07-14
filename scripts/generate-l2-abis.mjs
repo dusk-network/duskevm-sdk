@@ -17,6 +17,12 @@ const artifacts = [
     fragments: [
       {
         type: "function",
+        name: "bridgeETHTo",
+        inputs: ["address", "uint32", "bytes"],
+        stateMutability: "payable",
+      },
+      {
+        type: "function",
         name: "withdraw",
         inputs: ["address", "uint256", "uint32", "bytes"],
         stateMutability: "payable",

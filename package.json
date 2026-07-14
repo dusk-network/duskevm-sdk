@@ -1,6 +1,6 @@
 {
   "name": "@dusk/evm-sdk",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "description": "Typed Dusk and DuskEVM bridge transaction helpers, codecs, clients, and lifecycle primitives",
   "type": "module",
   "license": "MPL-2.0",

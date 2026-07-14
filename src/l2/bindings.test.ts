@@ -112,11 +112,9 @@ describe("DuskEVM L2 bindings", () => {
     expect(native.to).toBe(L2_STANDARD_BRIDGE_ADDRESS);
     expect(native.value).toBe(10n);
     expect(decodeFunctionData({ abi: l2StandardBridgeAbi, data: native.data })).toEqual({
-      functionName: "withdrawTo",
+      functionName: "bridgeETHTo",
       args: [
-        L2_LEGACY_ERC20_ETH_ADDRESS,
         "0x4444444444444444444444444444444444444444",
-        10n,
         200_000,
         "0xabcd",
       ],

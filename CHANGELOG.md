@@ -2,6 +2,11 @@
 
 Notable changes to `@dusk/evm-sdk` are documented here.
 
+## 0.1.0-beta.2
+
+- Encode native DuskEVM withdrawals with the adapter-supported
+  `bridgeETHTo(address,uint32,bytes)` selector.
+
 ## 0.1.0-beta.1
 
 Initial public prerelease:

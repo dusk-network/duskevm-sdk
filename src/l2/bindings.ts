@@ -176,17 +176,16 @@ export type EncodeL2NativeWithdrawalCallOptions = {
 export function encodeL2NativeWithdrawalCall(
   options: EncodeL2NativeWithdrawalCallOptions
 ): DuskEvmPreparedCall {
+  const bridgeAddress = options.bridgeAddress ?? L2_STANDARD_BRIDGE_ADDRESS;
   const amountWei = normalizeUint256(options.amountWei, "L2 native withdrawal amount");
-  const callOptions: EncodeL2WithdrawalCallOptions = {
-    l2Token: L2_LEGACY_ERC20_ETH_ADDRESS,
-    recipient: options.recipient,
-    amount: amountWei,
-    minGasLimit: options.minGasLimit,
-  };
-  if (options.bridgeAddress !== undefined) callOptions.bridgeAddress = options.bridgeAddress;
-  if (options.extraData !== undefined) callOptions.extraData = options.extraData;
+  const minGasLimit = normalizeUint32(options.minGasLimit, "L2 minGasLimit");
   return {
-    ...encodeL2WithdrawalCall(callOptions),
+    to: bridgeAddress,
+    data: encodeFunctionData({
+      abi: l2StandardBridgeAbi,
+      functionName: "bridgeETHTo",
+      args: [options.recipient, minGasLimit, options.extraData ?? "0x"],
+    }),
     value: amountWei,
   };
 }

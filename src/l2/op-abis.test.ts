@@ -72,6 +72,9 @@ describe("generated OP L2 ABIs", () => {
   });
 
   it("preserves the SDK-observed function selectors and event topics", () => {
+    expect(functionSelector(l2StandardBridgeAbi, "bridgeETHTo")).toBe(
+      toFunctionSelector("bridgeETHTo(address,uint32,bytes)")
+    );
     expect(functionSelector(l2StandardBridgeAbi, "withdraw")).toBe(
       toFunctionSelector("withdraw(address,uint256,uint32,bytes)")
     );

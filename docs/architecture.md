@@ -50,8 +50,8 @@ local setup uses different contract ids, gas limits, or call routing.
 Withdrawals are deliberately modeled as a staged lifecycle instead of a single
 helper that hides the protocol boundary:
 
-- native withdrawals prepare an L2 standard-bridge `withdrawTo` call with the
-  legacy ETH token marker and matching transaction value;
+- native withdrawals prepare the adapter-supported L2 standard-bridge
+  `bridgeETHTo` call with matching transaction value;
 - DRC20 withdrawals prepare an L2 standard-bridge `withdrawTo` call;
 - DRC721 withdrawals prepare an L2 ERC721 bridge `bridgeERC721To` call;
 - asset withdrawals use the generated versioned Dusk recipient wire format
