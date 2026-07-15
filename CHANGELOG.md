@@ -2,7 +2,7 @@
 
 Notable changes to `@dusk/evm-sdk` are documented here.
 
-## Unreleased
+## 0.1.0-beta.3
 
 - Track deposits from the Dusk adapter receipt to the deterministically derived
   DuskEVM transaction and distinguish pending, delivered, and conclusive

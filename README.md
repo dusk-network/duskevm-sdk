@@ -3,7 +3,7 @@
 `@dusk/evm-sdk` provides typed TypeScript helpers for applications that need to
 coordinate Dusk L1 and DuskEVM L2 bridge workflows.
 
-The `0.1.0-beta.2` line is a prerelease intended for integration testing. The
+The `0.1.0-beta.3` line is a prerelease intended for integration testing. The
 SDK deliberately stays thin: it helps applications build, submit, and track
 cross-layer intents, but it does not decide canonical chain state and it does
 not replace the DuskEVM adapter, op-node, Rusk, or wallet software.
@@ -38,7 +38,7 @@ publication is complete, install it from npm or JSR:
 
 ```sh
 npm install @dusk/evm-sdk@beta
-deno add jsr:@dusk/evm-sdk@0.1.0-beta.2
+deno add jsr:@dusk/evm-sdk@0.1.0-beta.3
 ```
 
 For repository development:
