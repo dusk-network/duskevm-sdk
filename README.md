@@ -16,6 +16,8 @@ not replace the DuskEVM adapter, op-node, Rusk, or wallet software.
 - DuskEVM L2 chain/client helpers and viem ABI bindings.
 - Cross-layer operation status primitives with resumable metadata.
 - Bridge intent and submission helpers for native, DRC20, and DRC721 deposits.
+- Deterministic L1-to-L2 deposit tracking from the adapter receipt through the
+  DuskEVM cross-domain relay receipt.
 - Withdrawal helpers for native, DRC20, and DRC721 L2 initiation calls,
   `MessagePassed` receipt parsing, and L1 prove/finalize transaction requests.
 - Versioned Dusk asset-recipient and native contract-credit encoders for bridge
@@ -80,6 +82,22 @@ const submitted = await bridge.submitNativeDeposit({
 });
 
 console.log(duskEvmTestnet.id, submitted.submittedTransaction.transactionHash);
+```
+
+Applications can resume a submitted deposit from its Dusk transaction hash.
+The observer distinguishes a missing receipt from a proven failure and derives
+the OP L2 transaction hash from the adapter's `TransactionDeposited` log:
+
+```ts
+import { observeDepositStatus } from "@dusk/evm-sdk";
+
+const status = await observeDepositStatus({
+  l1Client: adapterPublicClient,
+  l2Client: duskEvmPublicClient,
+  l1TransactionHash: submitted.submittedTransaction.transactionHash,
+});
+
+console.log(status.metadata.stage, status.metadata.l2TransactionHash);
 ```
 
 ## Withdrawal Shape
