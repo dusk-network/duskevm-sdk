@@ -1,4 +1,4 @@
-import { decodeDuskDeliveryEnvelope, encodeDuskDeliveryEnvelope } from "../envelope/index.js";
+import { decodeDuskDepositEnvelope, encodeDuskDepositEnvelope } from "../envelope/index.js";
 import { sdkError } from "../errors.js";
 import { normalizeEvmAddress } from "../evm-address.js";
 import {
@@ -167,7 +167,7 @@ type DepositInput = {
 function prepareDeposit(input: DepositInput): PreparedBridgeOperation {
   const asset = normalizeBridgeAsset(input.asset);
   const l2Recipient = normalizeEvmAddress(input.l2Recipient, "Bridge L2 recipient");
-  const envelopeHex = encodeDuskDeliveryEnvelope({
+  const depositEnvelopeHex = encodeDuskDepositEnvelope({
     target: {
       kind: "evm",
       value: l2Recipient,
@@ -177,11 +177,11 @@ function prepareDeposit(input: DepositInput): PreparedBridgeOperation {
   const gas = depositGas(input);
 
   return {
-    id: depositOperationId(asset, l2Recipient, envelopeHex),
+    id: depositOperationId(asset, l2Recipient, depositEnvelopeHex),
     direction: "l1-to-l2",
     asset,
-    envelopeHex,
-    envelope: decodeDuskDeliveryEnvelope(envelopeHex),
+    depositEnvelopeHex,
+    depositEnvelope: decodeDuskDepositEnvelope(depositEnvelopeHex),
     ...(gas === undefined ? {} : { gas }),
     metadata: {
       ...(input.metadata ?? {}),
@@ -243,18 +243,21 @@ async function submitBridgeOperation(
 function depositOperationId(
   asset: PreparedBridgeOperation["asset"],
   recipient: string,
-  envelopeHex: `0x${string}`
+  depositEnvelopeHex: `0x${string}`
 ): string {
-  return createBridgeOperationId("deposit", depositOperationIdPayload(asset, recipient, envelopeHex));
+  return createBridgeOperationId(
+    "deposit",
+    depositOperationIdPayload(asset, recipient, depositEnvelopeHex)
+  );
 }
 
 function depositOperationIdPayload(
   asset: PreparedBridgeOperation["asset"],
   recipient: string,
-  envelopeHex: `0x${string}`
+  depositEnvelopeHex: `0x${string}`
 ): JsonValue {
   const base = {
-    envelopeHex,
+    depositEnvelopeHex,
     prefix: "deposit",
     recipient: recipient.toLowerCase(),
   };

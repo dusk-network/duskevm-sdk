@@ -1,7 +1,7 @@
 # DuskEVM SDK
 
 `@dusk/evm-sdk` provides typed TypeScript helpers for applications that need to
-coordinate Dusk L1 and DuskEVM L2 bridge workflows.
+coordinate Dusk L1 and DuskEVM L2 bridge and cross-domain contract workflows.
 
 The `0.1.0-beta.3` line is a prerelease intended for integration testing. The
 SDK deliberately stays thin: it helps applications build, submit, and track
@@ -10,7 +10,9 @@ not replace the DuskEVM adapter, op-node, Rusk, or wallet software.
 
 ## Current Scope
 
-- Self-describing SDK delivery-envelope encode/decode diagnostics.
+- Self-describing SDK deposit-envelope encode/decode diagnostics.
+- Full-ID, zero-value L2-to-Dusk contract-call preparation through the standard
+  OP cross-domain Messenger.
 - Dusk L1 client interfaces, submit/wait helpers, and a Dusk Connect-compatible
   wallet adapter.
 - DuskEVM L2 chain/client helpers and viem ABI bindings.
@@ -30,6 +32,11 @@ not replace the DuskEVM adapter, op-node, Rusk, or wallet software.
 The `bridge` withdrawal helpers validate canonical Dusk recipient metadata.
 The lower-level `l2` encoding exports are raw OP ABI primitives for advanced
 callers and intentionally do not apply those bridge-specific checks.
+
+Application contract calls and bridge transfers are separate SDK operations.
+`prepareDuskContractCall` cannot attach value. DUSK, DRC20, and DRC721 value
+movement remains behind the typed bridge helpers and bridge-owned recipient
+formats.
 
 ## Install
 
@@ -100,6 +107,35 @@ const status = await observeDepositStatus({
 console.log(status.metadata.stage, status.metadata.l2TransactionHash);
 ```
 
+## Dusk Contract Calls
+
+An L2 application can target a Dusk contract by its complete 32-byte
+`ContractId`. The SDK wraps that ID and the application payload in the
+versioned contract-call envelope, then prepares a call to the standard OP L2
+Messenger:
+
+```ts
+import { prepareDuskContractCall } from "@dusk/evm-sdk";
+
+const call = prepareDuskContractCall({
+  targetContractId:
+    "0x1212121212121212121212121212121212121212121212121212121212121212",
+  payload: "0x1234",
+  minGasLimit: 150_000,
+});
+
+await walletClient.sendTransaction({
+  account,
+  to: call.l2Transaction.to,
+  data: call.l2Transaction.data,
+});
+```
+
+The receiving Dusk contract must expose `dusk_xdm_execute(payload)`, verify the
+immediate L1 Messenger caller, and obtain the authenticated L2 sender from the
+Messenger context. This path is intentionally zero-value; contract-directed
+native DUSK uses `encodeDuskNativeContractCredit` with a native withdrawal.
+
 ## Withdrawal Shape
 
 Withdrawals are OP-style multi-stage operations. The SDK prepares the L2 call,
@@ -154,7 +190,7 @@ The SDK should:
 - use viem for EVM/RPC primitives;
 - adapt Dusk Connect or W3sper-like clients through interfaces;
 - expose explicit operation metadata that applications can persist and resume;
-- decode and structurally validate SDK delivery envelopes for user/tooling diagnostics.
+- decode and structurally validate SDK deposit and contract-call envelopes.
 - keep default gas prices for normal Dusk L1 calls node-derived or explicit,
   not deployment-priced by default.
 - expose withdrawal stages without hiding the OP prove/finalize lifecycle.
@@ -171,7 +207,7 @@ The SDK should not:
 
 - `@dusk/evm-sdk`: complete public API.
 - `@dusk/evm-sdk/bridge`: deposit, withdrawal, and lifecycle helpers.
-- `@dusk/evm-sdk/envelope`: delivery-envelope codecs and diagnostics.
+- `@dusk/evm-sdk/envelope`: deposit and contract-call envelope codecs.
 - `@dusk/evm-sdk/l1`: Dusk transaction clients, gas, and confirmation helpers.
 - `@dusk/evm-sdk/l2`: DuskEVM chains, viem clients, ABIs, and raw call encoders.
 - `@dusk/evm-sdk/status`: generic operation polling and status types.

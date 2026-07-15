@@ -1,10 +1,10 @@
 import {
-  decodeDuskDeliveryEnvelope,
-  encodeDuskDeliveryEnvelope,
-  inspectDuskDeliveryEnvelope,
-} from "./codec.js";
+  decodeDuskDepositEnvelope,
+  encodeDuskDepositEnvelope,
+  inspectDuskDepositEnvelope,
+} from "./deposit.js";
 
-describe("Dusk delivery envelope codec", () => {
+describe("Dusk deposit envelope codec", () => {
   it.each([
     ["native", "dusk1recipient111111111111111111111111111111111"],
     ["contract", "contract-id"],
@@ -12,7 +12,7 @@ describe("Dusk delivery envelope codec", () => {
     ["evm", "0x1111111111111111111111111111111111111111"],
     ["raw", "opaque-target"],
   ] as const)("roundtrips a %s-targeted envelope", (kind, value) => {
-    const encoded = encodeDuskDeliveryEnvelope({
+    const encoded = encodeDuskDepositEnvelope({
       target: {
         kind,
         value,
@@ -20,7 +20,7 @@ describe("Dusk delivery envelope codec", () => {
       payload: "0x1234",
     });
 
-    expect(decodeDuskDeliveryEnvelope(encoded)).toEqual({
+    expect(decodeDuskDepositEnvelope(encoded)).toEqual({
       version: 1,
       target: {
         kind,
@@ -31,7 +31,7 @@ describe("Dusk delivery envelope codec", () => {
   });
 
   it("returns diagnostics for malformed data", () => {
-    const diagnostic = inspectDuskDeliveryEnvelope("0x1234");
+    const diagnostic = inspectDuskDepositEnvelope("0x1234");
     expect(diagnostic.ok).toBe(false);
     if (!diagnostic.ok) {
       expect(diagnostic.errors[0]).toMatch(/shorter/);
@@ -39,7 +39,7 @@ describe("Dusk delivery envelope codec", () => {
   });
 
   it("diagnoses bad magic, unsupported versions, and length mismatches", () => {
-    const valid = encodeDuskDeliveryEnvelope({
+    const valid = encodeDuskDepositEnvelope({
       target: { kind: "native", value: "dusk1recipient111111111111111111111111111111111" },
       payload: "0x1234",
     });
@@ -48,36 +48,36 @@ describe("Dusk delivery envelope codec", () => {
     const badVersion = mutateHexByte(valid, 4, 2);
     const badLength = `${valid}ff` as const;
 
-    expect(inspectDuskDeliveryEnvelope(badMagic)).toMatchObject({
+    expect(inspectDuskDepositEnvelope(badMagic)).toMatchObject({
       ok: false,
-      errors: ["Envelope magic mismatch"],
+      errors: ["Deposit envelope magic mismatch"],
     });
-    expect(inspectDuskDeliveryEnvelope(badVersion)).toMatchObject({
+    expect(inspectDuskDepositEnvelope(badVersion)).toMatchObject({
       ok: false,
-      errors: ["Unsupported delivery envelope version: 2"],
+      errors: ["Unsupported deposit envelope version: 2"],
     });
-    expect(inspectDuskDeliveryEnvelope(badLength)).toMatchObject({
+    expect(inspectDuskDepositEnvelope(badLength)).toMatchObject({
       ok: false,
       errors: [expect.stringMatching(/length mismatch/i)],
     });
   });
 
   it("accepts UTF-8 string payloads", () => {
-    const encoded = encodeDuskDeliveryEnvelope({
+    const encoded = encodeDuskDepositEnvelope({
       target: { kind: "contract", value: "contract-id" },
       payload: "hello",
     });
 
-    expect(decodeDuskDeliveryEnvelope(encoded).payload).toBe("0x68656c6c6f");
+    expect(decodeDuskDepositEnvelope(encoded).payload).toBe("0x68656c6c6f");
   });
 
   it("rejects target values that cannot fit the envelope header", () => {
     expect(() =>
-      encodeDuskDeliveryEnvelope({
+      encodeDuskDepositEnvelope({
         target: { kind: "raw", value: "x".repeat(0x10000) },
         payload: "0x",
       })
-    ).toThrow(/delivery target is too large/i);
+    ).toThrow(/deposit target is too large/i);
   });
 
   it("rejects payloads that cannot fit the envelope header", () => {
@@ -89,11 +89,11 @@ describe("Dusk delivery envelope codec", () => {
     }) as Uint8Array;
 
     expect(() =>
-      encodeDuskDeliveryEnvelope({
+      encodeDuskDepositEnvelope({
         target: { kind: "raw", value: "target" },
         payload,
       })
-    ).toThrow(/delivery payload is too large/i);
+    ).toThrow(/deposit payload is too large/i);
   });
 });
 

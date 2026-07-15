@@ -2,6 +2,15 @@
 
 Notable changes to `@dusk/evm-sdk` are documented here.
 
+## Unreleased
+
+- Add full-`ContractId`, zero-value L2-to-Dusk contract-call envelope and OP
+  Messenger transaction preparation.
+- Rename the existing SDK delivery envelope and bridge operation fields to
+  identify them explicitly as deposit metadata.
+- Keep bridge value transfers, asset recipients, and native contract credits
+  separate from arbitrary application calls.
+
 ## 0.1.0-beta.3
 
 - Track deposits from the Dusk adapter receipt to the deterministically derived

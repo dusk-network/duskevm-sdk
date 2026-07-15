@@ -7,11 +7,11 @@ part of consensus, adapter derivation, or OP-node execution.
 
 The initial package is a single TypeScript package with internal modules:
 
-- `envelope`: self-describing SDK delivery-envelope codecs and diagnostics.
+- `envelope`: distinct deposit and contract-call envelope codecs.
 - `l1`: Dusk L1 submission interfaces, gas resolution, wait helpers, and
   wallet/client adapters.
 - `l2`: DuskEVM viem chain definitions, EVM client helpers, and generated ABI
-  bindings for standard token and OP bridge calls.
+  bindings for standard token, OP bridge, and Messenger calls.
 - `bridge`: cross-layer operation intent helpers, Dusk bridge transaction
   builders, and status metadata.
 - `status`: polling and resumable operation status primitives.
@@ -42,7 +42,7 @@ current DuskEVM L1 bridge entrypoints:
 - DRC20 deposits use `bridgeERC20To`;
 - DRC721 deposits use `bridgeERC721To`;
 - DRC token deposits prefix `extraData` with the Dusk registry tag and 32-byte
-  contract id before appending the SDK delivery envelope.
+  contract id before appending the SDK deposit envelope.
 
 Applications can still inject a deployment-specific transaction builder when a
 local setup uses different contract ids, gas limits, or call routing.
@@ -61,7 +61,7 @@ helper that hides the protocol boundary:
 - L1 prove/finalize builders produce Dusk contract-call requests for the
   OptimismPortal2 entrypoints.
 
-Generic Dusk delivery envelopes are not bridge asset-recipient metadata. DRC20
+SDK deposit envelopes are not bridge asset-recipient metadata. DRC20
 and DRC721 withdrawals must use `encodeDuskExternalAssetRecipient` or
 `encodeDuskContractAssetRecipient`. Native withdrawals use the external-account
 format or the separate `encodeDuskNativeContractCredit` format for contract
@@ -73,6 +73,35 @@ deliberately preserve raw `extraData` access for advanced callers and do not
 enforce Dusk recipient semantics. Applications that want the SDK's canonical
 recipient checks should use `prepareNativeWithdrawal`, `prepareDrc20Withdrawal`,
 or `prepareDrc721Withdrawal` from the `bridge` surface.
+
+## Application Contract Calls
+
+The L2-to-Dusk application path is deliberately separate from the bridge API.
+`prepareDuskContractCall` encodes:
+
+```text
+version:u8 || kind:u8 || target_contract_id:[32] || payload:bytes
+```
+
+It then prepares `L2CrossDomainMessenger.sendMessage` to the fixed Dusk
+contract-call discriminator. The complete Dusk `ContractId` is the application
+routing identity; no mutable EVM-address mapping or receiver registry is
+involved.
+
+The typed helper never includes transaction value. The L1 Messenger also
+rejects nonzero value for this target. Value-bearing operations remain narrow:
+
+- native, DRC20, and DRC721 transfers enter fixed, authenticated bridge
+  contracts;
+- bridge recipient metadata chooses an external Dusk account or full contract
+  ID after the message reaches the bridge;
+- native DUSK sent to a contract becomes a claimable bridge credit using
+  `encodeDuskNativeContractCredit`, not an arbitrary value-bearing callback.
+
+Targets expose the stable `dusk_xdm_execute(payload)` entrypoint. Wire-version
+selection belongs to the Messenger envelope, so the target function name is
+not versioned. Targets still authenticate the immediate Messenger and read the
+original L2 sender from Messenger context before trusting the payload.
 
 The SDK does not choose a dispute game, fetch `eth_getProof`, decide output-root
 validity, or resolve games. Those observations come from op-node/L2/Rusk

@@ -179,7 +179,7 @@ describe("withdrawal helpers", () => {
         amountWei: 10n,
         delivery: { target: { kind: "bls", value: "legacy" }, payload: "0x" },
       } as never)
-    ).toThrow(/delivery envelopes are not supported/);
+    ).toThrow(/deposit envelopes are not withdrawal recipients/);
 
     expect(() =>
       prepareNativeWithdrawal({
@@ -188,7 +188,7 @@ describe("withdrawal helpers", () => {
         extraData: DUSK_NATIVE_RECIPIENT,
         delivery: { target: { kind: "bls", value: "legacy" }, payload: "0x" },
       } as never)
-    ).toThrow(/delivery envelopes are not supported/);
+    ).toThrow(/deposit envelopes are not withdrawal recipients/);
 
     expect(() =>
       prepareNativeWithdrawal({

@@ -1,13 +1,35 @@
 # Examples
 
-## Decode an SDK Delivery Envelope
+## Decode an SDK Deposit Envelope
 
 ```ts
-import { decodeDuskDeliveryEnvelope } from "@dusk/evm-sdk";
+import { decodeDuskDepositEnvelope } from "@dusk/evm-sdk";
 
-const decoded = decodeDuskDeliveryEnvelope("0x4445564d0104002a00000000...");
+const decoded = decodeDuskDepositEnvelope("0x4445564d0104002a00000000...");
 console.log(decoded.target);
 ```
+
+## Prepare an L2-to-Dusk Contract Call
+
+```ts
+import { prepareDuskContractCall } from "@dusk/evm-sdk";
+
+const contractCall = prepareDuskContractCall({
+  targetContractId:
+    "0x1212121212121212121212121212121212121212121212121212121212121212",
+  payload: "0x1234",
+  minGasLimit: 150_000,
+});
+
+await walletClient.sendTransaction({
+  account,
+  to: contractCall.l2Transaction.to,
+  data: contractCall.l2Transaction.data,
+});
+```
+
+This operation cannot carry value. Use the bridge withdrawal helpers for DUSK,
+DRC20, or DRC721 transfers.
 
 ## Prepare a Native Deposit
 

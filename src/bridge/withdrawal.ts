@@ -704,7 +704,7 @@ function withdrawalExtraData(
   if ("delivery" in params) {
     throw sdkError(
       "INVALID_OPERATION",
-      "Withdrawal delivery envelopes are not supported; pass canonical Dusk recipient extraData"
+      "SDK deposit envelopes are not withdrawal recipients; pass canonical Dusk recipient extraData"
     );
   }
   if (params.extraData === undefined) {
