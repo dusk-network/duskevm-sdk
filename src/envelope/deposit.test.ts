@@ -5,6 +5,29 @@ import {
 } from "./deposit.js";
 
 describe("Dusk deposit envelope codec", () => {
+  it("preserves the 0.1.0-beta.3 EVM-target wire fixture", () => {
+    const fixture =
+      "0x4445564d0104002a000000023078313131313131313131313131313131313131313131313131313131313131313131313131313131311234";
+
+    expect(
+      encodeDuskDepositEnvelope({
+        target: {
+          kind: "evm",
+          value: "0x1111111111111111111111111111111111111111",
+        },
+        payload: "0x1234",
+      })
+    ).toBe(fixture);
+    expect(decodeDuskDepositEnvelope(fixture)).toEqual({
+      version: 1,
+      target: {
+        kind: "evm",
+        value: "0x1111111111111111111111111111111111111111",
+      },
+      payload: "0x1234",
+    });
+  });
+
   it.each([
     ["native", "dusk1recipient111111111111111111111111111111111"],
     ["contract", "contract-id"],

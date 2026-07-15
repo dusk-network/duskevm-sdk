@@ -257,7 +257,8 @@ function depositOperationIdPayload(
   depositEnvelopeHex: `0x${string}`
 ): JsonValue {
   const base = {
-    depositEnvelopeHex,
+    // Keep the beta.3 operation-ID preimage stable while clarifying the public field name.
+    envelopeHex: depositEnvelopeHex,
     prefix: "deposit",
     recipient: recipient.toLowerCase(),
   };
