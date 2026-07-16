@@ -39,6 +39,18 @@ const requiredContracts = {
         ],
         "()"
       ),
+      claimNativeCredit: signature(
+        [
+          ["credit_id", "Bytes32"],
+          ["payload", "Vec < u8 >"],
+        ],
+        "bool"
+      ),
+      nativeCredit: signature(
+        [["credit_id", "Bytes32"]],
+        "(Bytes32 , EVMAddress , u64 , Bytes32 , u8)",
+        "read"
+      ),
     },
   },
   l1Erc721Bridge: {

@@ -24,6 +24,8 @@ not replace the DuskEVM adapter, op-node, Rusk, or wallet software.
   `MessagePassed` receipt parsing, and L1 prove/finalize transaction requests.
 - Versioned Dusk asset-recipient and native contract-credit encoders for bridge
   withdrawal `extraData`.
+- Native contract-credit parsing, authoritative state reads, lifecycle status,
+  and claim transaction submission.
 - Pluggable transaction builders, plus default builders for the DuskEVM bridge
   contract entrypoints.
 - Generated Dusk L1 method metadata imported from the contracts project's
@@ -136,6 +138,41 @@ immediate L1 Messenger caller, and obtain the authenticated L2 sender from the
 Messenger context. This path is intentionally zero-value; contract-directed
 native DUSK uses `encodeDuskNativeContractCredit` with a native withdrawal.
 
+For contract recipients, prefer `prepareNativeContractCreditWithdrawal`. It
+derives the OP `to` address from the complete Dusk `ContractId`, preventing the
+20-byte recipient and the actual credit target from disagreeing:
+
+```ts
+const withdrawal = bridge.prepareNativeContractCreditWithdrawal({
+  targetContractId:
+    "0x1212121212121212121212121212121212121212121212121212121212121212",
+  amountWei: 1_000_000_000n,
+  payload: "0x1234",
+});
+
+const message = parseMessagePassedReceipt(l2Receipt);
+const expectedCredit = parseNativeCreditWithdrawal(message.withdrawal);
+
+// After the normal OP prove/finalize stages:
+const status = await bridge.observeNativeCredit(expectedCredit.creditId);
+if (status.metadata?.stage === "credit_pending") {
+  await bridge.submitNativeCreditClaim({
+    creditId: expectedCredit.creditId,
+    payload: expectedCredit.payload,
+  }, { wait: true });
+
+  const claimed = await bridge.readNativeCredit(expectedCredit.creditId);
+  if (claimed.state !== "claimed") throw new Error(`unexpected credit state: ${claimed.state}`);
+}
+```
+
+`observeNativeCredit` requires the configured Dusk L1 client to expose a
+`readContract` adapter. Claims are permissionless, but the target, amount,
+authenticated L2 sender, and payload hash are fixed by the finalized credit.
+Contract-credit amounts must be exact LUX values (`amountWei % 10^9 === 0`) and
+must fit Dusk's `u64` native transfer amount; the preparation and parsing
+helpers reject invalid values before a claim is presented to the application.
+
 ## Withdrawal Shape
 
 Withdrawals are OP-style multi-stage operations. The SDK prepares the L2 call,
@@ -182,6 +219,13 @@ const finalize = buildFinalizeWithdrawalTransaction({
   withdrawal: message.withdrawal,
 });
 ```
+
+DRC20 bridge amounts are preserved one-for-one as atomic units. The L2
+`OptimismMintableERC20` representation should use the same `decimals()` value
+as the DRC20. Canonical deployment tooling should query that value and use
+`createOptimismMintableERC20WithDecimals`; the SDK and bridge do not rescale or
+enforce token display metadata. Only native DUSK uses LUX/WEI conversion because
+the native balance representations differ.
 
 ## Boundary
 

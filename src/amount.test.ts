@@ -1,4 +1,4 @@
-import { formatLuxToDusk, parseDuskToLux, toLux } from "./amount.js";
+import { formatLuxToDusk, parseDuskToLux, toLux, weiToLuxExact } from "./amount.js";
 
 describe("amount helpers", () => {
   it("parses DUSK into Lux", () => {
@@ -22,5 +22,12 @@ describe("amount helpers", () => {
   it("rejects negative bigint Lux", () => {
     expect(() => toLux(-1n)).toThrow(/cannot be negative/i);
     expect(() => formatLuxToDusk(-1n)).toThrow(/cannot be negative/i);
+  });
+
+  it("converts only exact native contract-credit values", () => {
+    expect(weiToLuxExact(1_000_000_000n)).toBe(1n);
+    expect(weiToLuxExact(100_000_000_000_000_000n)).toBe(100_000_000n);
+    expect(() => weiToLuxExact(1n)).toThrow(/exact Lux/i);
+    expect(() => weiToLuxExact((1n << 64n) * 1_000_000_000n)).toThrow(/u64/i);
   });
 });

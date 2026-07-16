@@ -62,7 +62,8 @@ Additional knobs mirror the script defaults:
 - `SDK_SMOKE_MIN_GAS_LIMIT`, default `200000`.
 - `SDK_SMOKE_NATIVE_DEPOSIT_LUX`, default `1`.
 - `SDK_SMOKE_NATIVE_WITHDRAW_WEI`, default `1000000000`.
-- `SDK_SMOKE_WITHDRAW_EXTRA_DATA`, default `0x`.
+- `SDK_SMOKE_WITHDRAW_EXTRA_DATA`, required for an external-account withdrawal
+  unless `SDK_SMOKE_NATIVE_CREDIT_TARGET_ID` is provided.
 - `SDK_SMOKE_L2_RECEIPT_TIMEOUT_MS`, default `120000`.
 - `SDK_SMOKE_PROVE_GAS_LIMIT` and `SDK_SMOKE_FINALIZE_GAS_LIMIT`, optional
   prove/finalize request overrides.
@@ -101,6 +102,29 @@ The proof JSON shape is:
 
 When no proof JSON is provided, the script stops after parsing the L2
 `MessagePassed` receipt and reports the resumable `proof_not_ready` status.
+
+## Native Contract Credits
+
+To exercise the contract-recipient path, provide the complete Dusk contract ID
+and optional callback payload:
+
+```sh
+export SDK_SMOKE_NATIVE_CREDIT_TARGET_ID='0x...32-byte-contract-id...'
+export SDK_SMOKE_NATIVE_CREDIT_PAYLOAD='0x1234'
+```
+
+The smoke script derives the canonical OP recipient and the bridge credit ID
+from the nested `relayMessage`. To query and claim after finalization, also set:
+
+```sh
+export SDK_SMOKE_NATIVE_CREDIT_CLAIM=1
+export SDK_SMOKE_L1_WAIT=1
+export SDK_SMOKE_L1_READ_ARGV='["node", "./read-dusk-contract.mjs"]'
+```
+
+The read adapter receives `{ contractId, method, args }` as JSON and must return
+the decoded `nativeCredit` tuple. Claiming verifies the state changes from
+`pending` to `claimed` without changing the bound amount.
 
 ## Token Paths
 

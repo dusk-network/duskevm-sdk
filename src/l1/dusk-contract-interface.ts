@@ -4,8 +4,8 @@
 /** Source revision and digest for the imported public Dusk L1 interface. */
 export const duskL1ContractInterfaceSource = {
   "schemaVersion": 1,
-  "revision": "b39613569e35e03e1d7f9937ce6bb4e838a797ef",
-  "interfaceDigestSha256": "98ccf77cf5be61b4dc9d297fb6a13a90058f0dc0922d30daeffb729a0a27cab4"
+  "revision": "d0f46f047ba2140eab480ccbd785928f4ea6d535",
+  "interfaceDigestSha256": "c2ec9999125ae1c462981e0b6b2fcea66a4f26de16901efc907e0fe2e17e077f"
 } as const;
 
 /** Public bridge recipient wire-format constants owned by the L1 contracts. */
@@ -81,6 +81,32 @@ export const duskL1ContractMethods = {
         }
       ],
       "output": "()"
+    },
+    "claimNativeCredit": {
+      "name": "claimNativeCredit",
+      "stateMutability": "write",
+      "inputs": [
+        {
+          "name": "credit_id",
+          "rustType": "Bytes32"
+        },
+        {
+          "name": "payload",
+          "rustType": "Vec < u8 >"
+        }
+      ],
+      "output": "bool"
+    },
+    "nativeCredit": {
+      "name": "nativeCredit",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "credit_id",
+          "rustType": "Bytes32"
+        }
+      ],
+      "output": "(Bytes32 , EVMAddress , u64 , Bytes32 , u8)"
     }
   },
   "l1Erc721Bridge": {

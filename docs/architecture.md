@@ -52,6 +52,10 @@ helper that hides the protocol boundary:
 
 - native withdrawals prepare the adapter-supported L2 standard-bridge
   `bridgeETHTo` call with matching transaction value;
+- native contract-credit withdrawals derive the OP recipient from the full
+  Dusk `ContractId`, then expose the bridge's pending/claimed state and claim
+  transaction as explicit SDK stages; their WEI amount must convert to exact
+  LUX and fit Dusk's `u64` native transfer amount;
 - DRC20 withdrawals prepare an L2 standard-bridge `withdrawTo` call;
 - DRC721 withdrawals prepare an L2 ERC721 bridge `bridgeERC721To` call;
 - asset withdrawals use the generated versioned Dusk recipient wire format
@@ -67,6 +71,14 @@ and DRC721 withdrawals must use `encodeDuskExternalAssetRecipient` or
 format or the separate `encodeDuskNativeContractCredit` format for contract
 credits. The typed withdrawal helpers require and validate these formats before
 constructing L2 calldata.
+
+DRC20 amounts remain raw atomic units across the bridge. The corresponding L2
+representation should copy the DRC20's display decimals when it is created;
+canonical deployment tooling should query that value and call the OP factory's
+decimal-aware creation function. Neither bridge direction scales token amounts
+or enforces display metadata. Native DUSK is the exception: its LUX/WEI
+conversion exists because Dusk and the EVM native balance use different decimal
+bases.
 
 The exported `l2` encoding functions are lower-level OP ABI primitives. They
 deliberately preserve raw `extraData` access for advanced callers and do not
@@ -97,6 +109,12 @@ rejects nonzero value for this target. Value-bearing operations remain narrow:
   ID after the message reaches the bridge;
 - native DUSK sent to a contract becomes a claimable bridge credit using
   `encodeDuskNativeContractCredit`, not an arbitrary value-bearing callback.
+
+The credit ID is the exact L1 Messenger replay hash decoded from the nested OP
+`relayMessage`, not an SDK-generated identifier. Finalization creates a pending
+credit without moving custody. A later `claimNativeCredit` call transfers the
+bound amount through `receive_from_bridge`; rejection leaves the credit pending
+and a successful claim is terminal.
 
 Targets expose the stable `dusk_xdm_execute(payload)` entrypoint. Wire-version
 selection belongs to the Messenger envelope, so the target function name is

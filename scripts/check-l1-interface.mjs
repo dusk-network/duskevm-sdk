@@ -13,6 +13,8 @@ const requiredExports = [
 const requiredMethods = [
   "depositETHToWithValue",
   "bridgeERC20To",
+  "claimNativeCredit",
+  "nativeCredit",
   "bridgeERC721To",
   "proveWithdrawalTransaction",
   "finalizeWithdrawalTransaction",

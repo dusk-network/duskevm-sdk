@@ -5,6 +5,7 @@ import {
   toEventSelector,
   type Hex,
 } from "viem";
+import { weiToLuxExact } from "../amount.js";
 import { sdkError } from "../errors.js";
 import { normalizeEvmAddress } from "../evm-address.js";
 import { duskL1ContractMethods } from "../l1/dusk-contract-interface.js";
@@ -29,6 +30,10 @@ import type { EvmAddress, JsonValue, TransactionHash } from "../types.js";
 import { normalizeUint32 } from "../uint32.js";
 import { normalizeUint256 } from "../uint256.js";
 import {
+  decodeDuskNativeContractCredit,
+  duskContractIdToEvmAddress,
+  encodeDuskNativeContractCredit,
+  isDuskNativeContractCredit,
   validateDuskAssetRecipient,
   validateDuskNativeWithdrawalRecipient,
 } from "./asset-recipient.js";
@@ -78,6 +83,15 @@ export type WithdrawalBaseParams = WithdrawalExtraDataParams & {
 /** Parameters for initiating a native DUSK withdrawal on L2. */
 export type NativeWithdrawalParams = WithdrawalBaseParams & {
   amountWei: bigint;
+};
+
+/** Parameters for withdrawing native DUSK into a Dusk contract credit. */
+export type NativeContractCreditWithdrawalParams = Omit<
+  NativeWithdrawalParams,
+  "recipient" | "extraData"
+> & {
+  targetContractId: Hex;
+  payload?: Hex;
 };
 
 /** Parameters for initiating a DRC20 withdrawal on L2. */
@@ -254,6 +268,17 @@ export function prepareNativeWithdrawal(params: NativeWithdrawalParams): Prepare
   const minGasLimit = withdrawalMinGasLimit(params.minGasLimit);
   const recipient = normalizeEvmAddress(params.recipient, "Withdrawal recipient");
   const amountWei = normalizeUint256(params.amountWei, "Withdrawal native amount");
+  if (isDuskNativeContractCredit(extraData)) {
+    const credit = decodeDuskNativeContractCredit(extraData);
+    const expectedRecipient = duskContractIdToEvmAddress(credit.targetContractId);
+    if (recipient !== expectedRecipient) {
+      throw sdkError(
+        "INVALID_OPERATION",
+        "Native contract-credit recipient must match the target ContractId"
+      );
+    }
+    weiToLuxExact(amountWei);
+  }
   const asset: WithdrawalAsset = { kind: "native", amountWei };
   return preparedWithdrawal(
     withWithdrawalMetadata(
@@ -272,6 +297,23 @@ export function prepareNativeWithdrawal(params: NativeWithdrawalParams): Prepare
       params.metadata
     )
   );
+}
+
+/** Prepare a native withdrawal whose recipient is derived from a full Dusk ContractId. */
+export function prepareNativeContractCreditWithdrawal(
+  params: NativeContractCreditWithdrawalParams
+): PreparedWithdrawalOperation {
+  const extraData = encodeDuskNativeContractCredit(
+    params.targetContractId,
+    params.payload ?? "0x"
+  );
+  return prepareNativeWithdrawal({
+    recipient: duskContractIdToEvmAddress(params.targetContractId),
+    amountWei: params.amountWei,
+    extraData,
+    ...(params.minGasLimit === undefined ? {} : { minGasLimit: params.minGasLimit }),
+    ...(params.metadata === undefined ? {} : { metadata: params.metadata }),
+  });
 }
 
 /** Prepare a DRC20 withdrawal call with validated Dusk recipient metadata. */

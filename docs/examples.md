@@ -144,6 +144,44 @@ const drc721Withdrawal = prepareDrc721Withdrawal({
 DRC721 withdrawals use the L2 ERC721 bridge predeploy. Native and DRC20
 withdrawals use the L2 standard bridge.
 
+Token amounts in these calls are atomic units. Create the L2
+`OptimismMintableERC20` with the same decimals as the DRC20 and pass the amount
+unchanged; do not apply the native DUSK LUX/WEI conversion to DRC20 assets.
+
+## Withdraw Native DUSK To A Contract
+
+```ts
+const withdrawal = bridge.prepareNativeContractCreditWithdrawal({
+  targetContractId:
+    "0x1212121212121212121212121212121212121212121212121212121212121212",
+  amountWei: 1_000_000_000n,
+  payload: "0x1234",
+});
+
+const message = parseMessagePassedReceipt(l2Receipt);
+const credit = parseNativeCreditWithdrawal(message.withdrawal);
+
+// Submit the normal prove and finalize requests first.
+const pending = await bridge.observeNativeCredit(credit.creditId);
+if (pending.metadata?.stage === "credit_pending") {
+  await bridge.submitNativeCreditClaim({
+    creditId: credit.creditId,
+    payload: credit.payload,
+  }, { wait: true });
+
+  const claimed = await bridge.readNativeCredit(credit.creditId);
+  if (claimed.state !== "claimed") throw new Error(`unexpected credit state: ${claimed.state}`);
+}
+```
+
+The SDK derives the 20-byte OP recipient from the full Dusk contract ID. The
+claim caller cannot replace the target, amount, original L2 sender, or payload.
+The native value must be an exact multiple of `10^9` WEI and the resulting LUX
+amount must fit `u64`; both preparation and message parsing enforce this.
+The target opts in by implementing `receive_from_bridge`, authenticating the
+transfer contract and Standard Bridge, and checking the bridge's active credit
+context; no recipient registration transaction is involved.
+
 ## Parse a Withdrawal Message and Build L1 Requests
 
 ```ts

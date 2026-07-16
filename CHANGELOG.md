@@ -10,6 +10,10 @@ Notable changes to `@dusk/evm-sdk` are documented here.
   identify them explicitly as deposit metadata.
 - Keep bridge value transfers, asset recipients, and native contract credits
   separate from arbitrary application calls.
+- Add native contract-credit withdrawal preparation, authenticated OP message
+  parsing, authoritative L1 state reads, lifecycle status, and claim submission.
+- Preserve DRC20 amounts as raw atomic units and require L2 representations to
+  use the corresponding DRC20 display decimals.
 
 ## 0.1.0-beta.3
 

@@ -1,6 +1,7 @@
 import { encodeAbiParameters, encodeEventTopics } from "viem";
 import { createBridgeClient } from "./client.js";
 import {
+  duskContractIdToEvmAddress,
   encodeDuskContractAssetRecipient,
   encodeDuskNativeContractCredit,
 } from "./asset-recipient.js";
@@ -12,6 +13,7 @@ import {
   parseMessagePassedReceipt,
   prepareDrc20Withdrawal,
   prepareDrc721Withdrawal,
+  prepareNativeContractCreditWithdrawal,
   prepareNativeWithdrawal,
   serializeOutputRootProofForDuskAbi,
   serializeWithdrawalForDuskAbi,
@@ -35,12 +37,14 @@ const L2_TOKEN = "0x5555555555555555555555555555555555555555" as const;
 const DUSK_CONTRACT_ID = `0x${"66".repeat(32)}` as const;
 const DUSK_ASSET_RECIPIENT = encodeDuskContractAssetRecipient(DUSK_CONTRACT_ID);
 const DUSK_NATIVE_RECIPIENT = encodeDuskNativeContractCredit(DUSK_CONTRACT_ID);
+const DUSK_NATIVE_EVM_RECIPIENT = duskContractIdToEvmAddress(DUSK_CONTRACT_ID);
+const DUSK_NATIVE_AMOUNT_WEI = 1_000_000_000n;
 
 describe("withdrawal helpers", () => {
   it("prepares native, DRC20, and DRC721 L2 withdrawal operations", () => {
     const native = prepareNativeWithdrawal({
-      recipient: RECIPIENT,
-      amountWei: 10n,
+      recipient: DUSK_NATIVE_EVM_RECIPIENT,
+      amountWei: DUSK_NATIVE_AMOUNT_WEI,
       extraData: DUSK_NATIVE_RECIPIENT,
     });
     const drc20 = prepareDrc20Withdrawal({
@@ -65,8 +69,8 @@ describe("withdrawal helpers", () => {
     });
 
     expect(native.direction).toBe("l2-to-l1");
-    expect(native.asset).toEqual({ kind: "native", amountWei: 10n });
-    expect(native.l2Transaction.value).toBe(10n);
+    expect(native.asset).toEqual({ kind: "native", amountWei: DUSK_NATIVE_AMOUNT_WEI });
+    expect(native.l2Transaction.value).toBe(DUSK_NATIVE_AMOUNT_WEI);
     expect(native.extraData).toBe(`0x2001${"66".repeat(32)}`);
     expect(drc20.asset).toEqual({
       kind: "drc20",
@@ -83,6 +87,38 @@ describe("withdrawal helpers", () => {
     expect(native.id).toMatch(/^withdrawal:0x[0-9a-f]{64}$/);
     expect(native.id).not.toBe(drc20.id);
     expect(drc20.id).toBe(drc20WithoutL1Token.id);
+  });
+
+  it("derives native contract-credit recipients and rejects ambiguous low-level inputs", () => {
+    const prepared = prepareNativeContractCreditWithdrawal({
+      targetContractId: DUSK_CONTRACT_ID,
+      amountWei: DUSK_NATIVE_AMOUNT_WEI,
+      payload: "0x1234",
+    });
+    expect(prepared.recipient).toBe(DUSK_NATIVE_EVM_RECIPIENT);
+    expect(prepared.extraData).toBe(`0x2001${"66".repeat(32)}1234`);
+
+    expect(() =>
+      prepareNativeWithdrawal({
+        recipient: RECIPIENT,
+        amountWei: DUSK_NATIVE_AMOUNT_WEI,
+        extraData: DUSK_NATIVE_RECIPIENT,
+      })
+    ).toThrow(/recipient must match the target ContractId/);
+
+    expect(() =>
+      prepareNativeContractCreditWithdrawal({
+        targetContractId: DUSK_CONTRACT_ID,
+        amountWei: 1n,
+      })
+    ).toThrow(/must convert to exact Lux/);
+
+    expect(() =>
+      prepareNativeContractCreditWithdrawal({
+        targetContractId: DUSK_CONTRACT_ID,
+        amountWei: (1n << 64n) * DUSK_NATIVE_AMOUNT_WEI,
+      })
+    ).toThrow(/exceeds the Dusk u64 Lux limit/);
   });
 
   it("canonicalizes withdrawal addresses and DRC721 token IDs for operation identity", () => {
@@ -132,7 +168,7 @@ describe("withdrawal helpers", () => {
     const prepareInvalidRecipient = () =>
       prepareNativeWithdrawal({
         recipient: "0x1234" as never,
-        amountWei: 10n,
+        amountWei: DUSK_NATIVE_AMOUNT_WEI,
         extraData: DUSK_NATIVE_RECIPIENT,
       });
     const prepareInvalidToken = () =>
@@ -156,7 +192,7 @@ describe("withdrawal helpers", () => {
   it("rejects withdrawal amounts outside uint256", () => {
     expect(() =>
       prepareNativeWithdrawal({
-        recipient: RECIPIENT,
+        recipient: DUSK_NATIVE_EVM_RECIPIENT,
         amountWei: -1n,
         extraData: DUSK_NATIVE_RECIPIENT,
       })
@@ -176,7 +212,7 @@ describe("withdrawal helpers", () => {
     expect(() =>
       prepareNativeWithdrawal({
         recipient: RECIPIENT,
-        amountWei: 10n,
+        amountWei: DUSK_NATIVE_AMOUNT_WEI,
         delivery: { target: { kind: "bls", value: "legacy" }, payload: "0x" },
       } as never)
     ).toThrow(/deposit envelopes are not withdrawal recipients/);
@@ -220,14 +256,14 @@ describe("withdrawal helpers", () => {
   it("exposes withdrawal preparation through the bridge client", () => {
     const bridge = createBridgeClient();
     const withdrawal = bridge.prepareNativeWithdrawal({
-      recipient: RECIPIENT,
-      amountWei: 10n,
+      recipient: DUSK_NATIVE_EVM_RECIPIENT,
+      amountWei: DUSK_NATIVE_AMOUNT_WEI,
       extraData: DUSK_NATIVE_RECIPIENT,
     });
 
     expect(withdrawal.direction).toBe("l2-to-l1");
     expect(withdrawal.metadata).toMatchObject({
-      recipient: RECIPIENT,
+      recipient: DUSK_NATIVE_EVM_RECIPIENT,
       minGasLimit: 200_000,
       extraData: DUSK_NATIVE_RECIPIENT,
     });
@@ -446,8 +482,8 @@ describe("withdrawal helpers", () => {
 
   it("reports withdrawal lifecycle not-ready, prove-ready, finalized, and failed paths", () => {
     const operation = prepareNativeWithdrawal({
-      recipient: RECIPIENT,
-      amountWei: 10n,
+      recipient: DUSK_NATIVE_EVM_RECIPIENT,
+      amountWei: DUSK_NATIVE_AMOUNT_WEI,
       extraData: DUSK_NATIVE_RECIPIENT,
     });
     const message = {
