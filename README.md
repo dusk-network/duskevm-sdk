@@ -151,17 +151,18 @@ bridge APIs.
 ## Calls From DuskEVM To Dusk
 
 An L2 application can target a Dusk contract by its complete 32-byte
-`ContractId`. The SDK wraps that ID and the application payload in the
-versioned contract-call envelope, then prepares a call to the standard OP L2
-Messenger:
+`ContractId` and exported entrypoint. Encode the arguments with that contract's
+Dusk data driver, then pass the exact Piecrust bytes to the SDK:
 
 ```ts
 import { prepareDuskContractCall } from "@dusk/evm-sdk";
 
+const fnArgs = await targetContract.encode("record_value", { value: "42" });
 const call = prepareDuskContractCall({
   targetContractId:
     "0x1212121212121212121212121212121212121212121212121212121212121212",
-  payload: "0x1234",
+  entrypoint: "record_value",
+  fnArgs,
   minGasLimit: 150_000,
 });
 
@@ -172,10 +173,12 @@ await walletClient.sendTransaction({
 });
 ```
 
-The receiving Dusk contract must expose `dusk_xdm_execute(payload)`, verify the
-immediate L1 Messenger caller, and obtain the authenticated L2 sender from the
-Messenger context. This path is intentionally zero-value; contract-directed
-native DUSK uses `encodeDuskNativeContractCredit` with a native withdrawal.
+No receiver registration or XDM-specific callback is required. A permissionless
+entrypoint executes normally. An entrypoint that authorizes EVM identities must
+verify the immediate L1 Messenger caller and check the authenticated original
+sender from Messenger context. This path is intentionally zero-value;
+contract-directed native DUSK uses `encodeDuskNativeContractCredit` with a
+native withdrawal.
 
 For contract recipients, prefer `prepareNativeContractCreditWithdrawal`. It
 derives the OP `to` address from the complete Dusk `ContractId`, preventing the

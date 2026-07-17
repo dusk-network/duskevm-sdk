@@ -101,13 +101,14 @@ wallet cannot claim a Dusk contract's sender identity.
 For DuskEVM-to-Dusk calls, `prepareDuskContractCall` encodes:
 
 ```text
-version:u8 || kind:u8 || target_contract_id:[32] || payload:bytes
+version:u8 || kind:u8 || target_contract_id:[32] || entrypoint_len:u16 ||
+entrypoint:ASCII || fn_args:bytes
 ```
 
 It then prepares `L2CrossDomainMessenger.sendMessage` to the fixed Dusk
-contract-call discriminator. The complete Dusk `ContractId` is the application
-routing identity; no mutable EVM-address mapping or receiver registry is
-involved.
+contract-call discriminator. The complete Dusk `ContractId`, entrypoint, and
+exact Piecrust arguments are message-bound; no mutable EVM-address mapping,
+receiver registry, or mandatory callback is involved.
 
 Neither typed application helper includes transaction value. The public SDK
 interface exposes only zero-value `sendMessage` on the Dusk Messenger;
@@ -129,10 +130,11 @@ credit without moving custody. A later `claimNativeCredit` call transfers the
 bound amount through `receive_from_bridge`; rejection leaves the credit pending
 and a successful claim is terminal.
 
-Targets expose the stable `dusk_xdm_execute(payload)` entrypoint. Wire-version
-selection belongs to the Messenger envelope, so the target function name is
-not versioned. Targets still authenticate the immediate Messenger and read the
-original L2 sender from Messenger context before trusting the payload.
+Permissionless target entrypoints execute normally. Targets that authorize an
+EVM identity authenticate the immediate Messenger and read the original L2
+sender from Messenger context. Missing entrypoints, malformed arguments, and
+contract failures become replayable message failures; ordinary return bytes are
+ignored, matching EVM call-success semantics.
 
 The SDK does not choose a dispute game, fetch `eth_getProof`, decide output-root
 validity, or resolve games. Those observations come from op-node/L2/Rusk

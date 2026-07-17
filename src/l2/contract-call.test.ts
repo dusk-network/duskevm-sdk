@@ -10,7 +10,8 @@ describe("Dusk contract-call preparation", () => {
   it("prepares a standard zero-value OP Messenger call", () => {
     const prepared = prepareDuskContractCall({
       targetContractId: CONTRACT_ID,
-      payload: "0x1234",
+      entrypoint: "record_value",
+      fnArgs: "0x1234",
       minGasLimit: 175_000,
     });
 
@@ -20,7 +21,8 @@ describe("Dusk contract-call preparation", () => {
       version: 1,
       kind: 1,
       targetContractId: CONTRACT_ID,
-      payload: "0x1234",
+      entrypoint: "record_value",
+      fnArgs: "0x1234",
     });
     expect(
       decodeFunctionData({
@@ -36,12 +38,17 @@ describe("Dusk contract-call preparation", () => {
   it("normalizes a custom messenger and rejects invalid gas", () => {
     const prepared = prepareDuskContractCall({
       targetContractId: CONTRACT_ID,
+      entrypoint: "ping",
       messengerAddress: "0xABCDEFabcdefABCDEFabcdefABCDEFabcdefABCD",
     });
     expect(prepared.l2Transaction.to).toBe("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd");
 
     expect(() =>
-      prepareDuskContractCall({ targetContractId: CONTRACT_ID, minGasLimit: -1 })
+      prepareDuskContractCall({
+        targetContractId: CONTRACT_ID,
+        entrypoint: "ping",
+        minGasLimit: -1,
+      })
     ).toThrow(/minGasLimit/);
   });
 });
