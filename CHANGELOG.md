@@ -6,6 +6,8 @@ Notable changes to `@dusk/evm-sdk` are documented here.
 
 - Add full-`ContractId`, zero-value L2-to-Dusk contract-call envelope and OP
   Messenger transaction preparation.
+- Add typed preparation and submission for zero-value Dusk-to-DuskEVM contract
+  calls through the deployment's Dusk L1 Cross Domain Messenger.
 - Rename the existing SDK delivery envelope and bridge operation fields to
   identify them explicitly as deposit metadata.
 - Keep bridge value transfers, asset recipients, and native contract credits

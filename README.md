@@ -13,6 +13,8 @@ not replace the DuskEVM adapter, op-node, Rusk, or wallet software.
 - Self-describing SDK deposit-envelope encode/decode diagnostics.
 - Full-ID, zero-value L2-to-Dusk contract-call preparation through the standard
   OP cross-domain Messenger.
+- Zero-value Dusk-to-DuskEVM contract-call preparation and submission through
+  the deployed Dusk L1 Cross Domain Messenger.
 - Dusk L1 client interfaces, submit/wait helpers, and a Dusk Connect-compatible
   wallet adapter.
 - DuskEVM L2 chain/client helpers and viem ABI bindings.
@@ -36,9 +38,9 @@ The lower-level `l2` encoding exports are raw OP ABI primitives for advanced
 callers and intentionally do not apply those bridge-specific checks.
 
 Application contract calls and bridge transfers are separate SDK operations.
-`prepareDuskContractCall` cannot attach value. DUSK, DRC20, and DRC721 value
-movement remains behind the typed bridge helpers and bridge-owned recipient
-formats.
+Neither `prepareDuskContractCall` nor `prepareDuskEvmContractCall` can attach
+value. DUSK, DRC20, and DRC721 value movement remains behind the typed bridge
+helpers and bridge-owned recipient formats.
 
 ## Install
 
@@ -109,7 +111,44 @@ const status = await observeDepositStatus({
 console.log(status.metadata.stage, status.metadata.l2TransactionHash);
 ```
 
-## Dusk Contract Calls
+## Calls From Dusk To DuskEVM
+
+Each deployment includes a Dusk `L1CrossDomainMessenger` contract. Applications
+must obtain its full `contract_id` from the deployment address book or trusted
+network configuration; it is deployment-specific and is not inferred from a
+20-byte EVM address.
+
+```ts
+import {
+  createDuskConnectL1Client,
+  submitDuskEvmContractCall,
+} from "@dusk/evm-sdk";
+
+const l1 = createDuskConnectL1Client(duskWallet);
+const message = await submitDuskEvmContractCall(
+  l1,
+  {
+    messengerContractId: deployment.l1CrossDomainMessengerContractId,
+    target: "0x1111111111111111111111111111111111111111",
+    payload: "0x1234",
+    minGasLimit: 250_000,
+  },
+  { wait: true }
+);
+
+console.log(message.submission.submitted.transactionHash);
+```
+
+The L2 receiver authenticates the standard L2 Messenger and reads the original
+sender through `xDomainMessageSender()`. A direct wallet submission identifies
+the originating Dusk account. To preserve a Dusk contract as the sender, that
+contract must call the Dusk Messenger itself; an SDK transaction cannot
+impersonate a contract caller.
+
+This helper is zero-value. Native DUSK and token movement must use the typed
+bridge APIs.
+
+## Calls From DuskEVM To Dusk
 
 An L2 application can target a Dusk contract by its complete 32-byte
 `ContractId`. The SDK wraps that ID and the application payload in the

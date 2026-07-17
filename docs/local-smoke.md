@@ -60,6 +60,11 @@ Additional knobs mirror the script defaults:
 - `SDK_SMOKE_L2_CHAIN_ID`, default `745`.
 - `SDK_SMOKE_L2_CHAIN_NAME`, default `DuskEVM Local`.
 - `SDK_SMOKE_MIN_GAS_LIMIT`, default `200000`.
+- `SDK_SMOKE_L1_MESSENGER_ID`, the deployed Dusk L1 Cross Domain Messenger
+  ContractId.
+- `SDK_SMOKE_L2_MESSAGE_TARGET`, an optional EVM contract address that enables
+  a Dusk-to-DuskEVM application message.
+- `SDK_SMOKE_L2_MESSAGE_PAYLOAD`, optional target calldata, default `0x`.
 - `SDK_SMOKE_NATIVE_DEPOSIT_LUX`, default `1`.
 - `SDK_SMOKE_NATIVE_WITHDRAW_WEI`, default `1000000000`.
 - `SDK_SMOKE_WITHDRAW_EXTRA_DATA`, required for an external-account withdrawal
@@ -71,6 +76,8 @@ Additional knobs mirror the script defaults:
 The script prepares and can submit:
 
 - a native L1 -> L2 deposit through the SDK L1 transaction builder;
+- an optional zero-value Dusk -> DuskEVM application message through the Dusk
+  L1 Cross Domain Messenger;
 - a native L2 -> L1 withdrawal through a viem wallet transaction;
 - optional DRC20/DRC721 withdrawal calls when token env vars are provided.
 

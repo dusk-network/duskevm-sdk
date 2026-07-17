@@ -16,6 +16,19 @@ if (!sourceArgument) {
 
 const sourcePath = path.resolve(process.cwd(), sourceArgument);
 const requiredContracts = {
+  l1CrossDomainMessenger: {
+    artifactName: "l1_cross_domain_messenger",
+    methods: {
+      sendMessage: signature(
+        [
+          ["target", "EVMAddress"],
+          ["message", "Vec < u8 >"],
+          ["min_gas_limit", "u32"],
+        ],
+        "()"
+      ),
+    },
+  },
   l1StandardBridge: {
     artifactName: "l1_standard_bridge",
     methods: {

@@ -31,6 +31,33 @@ await walletClient.sendTransaction({
 This operation cannot carry value. Use the bridge withdrawal helpers for DUSK,
 DRC20, or DRC721 transfers.
 
+## Submit a Dusk-to-L2 Contract Call
+
+```ts
+import {
+  createDuskConnectL1Client,
+  submitDuskEvmContractCall,
+} from "@dusk/evm-sdk";
+
+const l1 = createDuskConnectL1Client(duskWallet);
+const message = await submitDuskEvmContractCall(
+  l1,
+  {
+    messengerContractId: deployment.l1CrossDomainMessengerContractId,
+    target: "0x1111111111111111111111111111111111111111",
+    payload: "0x1234",
+    minGasLimit: 250_000,
+  },
+  { wait: true }
+);
+
+console.log(message.submission.submitted.transactionHash);
+```
+
+The Messenger ContractId comes from the trusted deployment address book. This
+operation cannot carry value. A Dusk contract that needs to be the authenticated
+L2 sender must invoke the Messenger from inside that contract.
+
 ## Prepare a Native Deposit
 
 ```ts

@@ -18,10 +18,12 @@ import {
   parseDuskToLux,
   parseMessagePassedReceipt,
   parseNativeCreditWithdrawal,
+  prepareDuskEvmContractCall,
   prepareDrc20Withdrawal,
   prepareDrc721Withdrawal,
   prepareNativeWithdrawal,
   submitDuskL1Transaction,
+  submitDuskEvmContractCall,
   withdrawalLifecycleStatus,
 } from "../dist/index.js";
 
@@ -55,6 +57,9 @@ const portalContractId = env.SDK_SMOKE_PORTAL_ID;
 const nativeCreditTargetId = env.SDK_SMOKE_NATIVE_CREDIT_TARGET_ID;
 const effectiveNativeCreditTargetId = nativeCreditTargetId ?? (dryRun ? DRY_RUN_CONTRACT_ID : undefined);
 const nativeCreditPayload = env.SDK_SMOKE_NATIVE_CREDIT_PAYLOAD ?? "0x";
+const l1MessengerContractId = env.SDK_SMOKE_L1_MESSENGER_ID;
+const l2MessageTarget = env.SDK_SMOKE_L2_MESSAGE_TARGET;
+const l2MessagePayload = env.SDK_SMOKE_L2_MESSAGE_PAYLOAD ?? "0x";
 
 const results = [];
 
@@ -78,6 +83,7 @@ const bridge = createBridgeClient({
 });
 
 await runNativeDeposit();
+await runOptionalDuskEvmContractCall();
 await runNativeWithdrawal();
 await runOptionalTokenWithdrawals();
 
@@ -115,6 +121,34 @@ async function runNativeDeposit() {
     name: "native deposit submit",
     status: "submitted",
     detail: submitted.submittedTransaction.transactionHash,
+  });
+}
+
+async function runOptionalDuskEvmContractCall() {
+  if (!dryRun && !l2MessageTarget) return;
+  const options = {
+    messengerContractId:
+      l1MessengerContractId ?? (dryRun ? "dry-run-l1-cross-domain-messenger" : ""),
+    target: l2MessageTarget ?? DRY_RUN_ADDRESS,
+    payload: l2MessagePayload,
+    minGasLimit,
+  };
+  const prepared = prepareDuskEvmContractCall(options);
+  results.push({
+    name: "Dusk-to-DuskEVM contract call",
+    status: "prepared",
+    detail: `${prepared.l1Transaction.contractId}::${prepared.l1Transaction.method} -> ${prepared.target}`,
+  });
+
+  if (dryRun) return;
+  requireEnv("SDK_SMOKE_L1_MESSENGER_ID", l1MessengerContractId);
+  const submitted = await submitDuskEvmContractCall(commandL1Client(), options, {
+    wait: env.SDK_SMOKE_L1_WAIT === "1",
+  });
+  results.push({
+    name: "Dusk-to-DuskEVM contract call submit",
+    status: "submitted",
+    detail: submitted.submission.submitted.transactionHash,
   });
 }
 
@@ -449,6 +483,9 @@ Common optional settings:
   SDK_SMOKE_L1_GAS_PRICE_ARGV         Optional JSON argv gas-price adapter.
   SDK_SMOKE_L1_WAIT=1                 Enables L1 receipt waiting.
   SDK_SMOKE_L1_READ_ARGV              JSON argv used for authoritative contract reads.
+  SDK_SMOKE_L1_MESSENGER_ID           Dusk L1 Cross Domain Messenger ContractId.
+  SDK_SMOKE_L2_MESSAGE_TARGET         Optional EVM target; enables a Dusk-to-DuskEVM message.
+  SDK_SMOKE_L2_MESSAGE_PAYLOAD        Optional message calldata. Default: 0x.
   SDK_SMOKE_NATIVE_DEPOSIT_LUX        Default: 1
   SDK_SMOKE_NATIVE_WITHDRAW_WEI       Default: 1000000000
   SDK_SMOKE_NATIVE_CREDIT_TARGET_ID   Full Dusk ContractId for a native contract-credit withdrawal.

@@ -11,6 +11,7 @@ const requiredExports = [
   "duskL1ContractMethods",
 ];
 const requiredMethods = [
+  "sendMessage",
   "depositETHToWithValue",
   "bridgeERC20To",
   "claimNativeCredit",
@@ -30,6 +31,7 @@ const forbiddenFragments = [
   "event_fixtures",
   "abi_snapshot",
   "contracts/dispute-game-factory",
+  "sendMessageWithValue",
 ];
 
 for (const name of requiredExports) {

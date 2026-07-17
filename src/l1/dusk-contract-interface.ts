@@ -4,8 +4,8 @@
 /** Source revision and digest for the imported public Dusk L1 interface. */
 export const duskL1ContractInterfaceSource = {
   "schemaVersion": 1,
-  "revision": "d0f46f047ba2140eab480ccbd785928f4ea6d535",
-  "interfaceDigestSha256": "c2ec9999125ae1c462981e0b6b2fcea66a4f26de16901efc907e0fe2e17e077f"
+  "revision": "568bed93a884690f8f0b2a2aaf5269efce2803d2",
+  "interfaceDigestSha256": "28c13006a82c593886e6b755d70f56f350a5116428b8912afce5ea4d6f3ad6d2"
 } as const;
 
 /** Public bridge recipient wire-format constants owned by the L1 contracts. */
@@ -27,6 +27,27 @@ export const duskL1WireFormats = {
 
 /** Allowlisted Dusk L1 method signatures used by this SDK. */
 export const duskL1ContractMethods = {
+  "l1CrossDomainMessenger": {
+    "sendMessage": {
+      "name": "sendMessage",
+      "stateMutability": "write",
+      "inputs": [
+        {
+          "name": "target",
+          "rustType": "EVMAddress"
+        },
+        {
+          "name": "message",
+          "rustType": "Vec < u8 >"
+        },
+        {
+          "name": "min_gas_limit",
+          "rustType": "u32"
+        }
+      ],
+      "output": "()"
+    }
+  },
   "l1StandardBridge": {
     "depositETHToWithValue": {
       "name": "depositETHToWithValue",
