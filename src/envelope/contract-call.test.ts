@@ -1,4 +1,5 @@
 import { keccak256, stringToHex } from "viem";
+import { duskL1WireFormats } from "../l1/dusk-contract-interface.js";
 import {
   decodeDuskContractCallEnvelope,
   DUSK_CONTRACT_CALL_TARGET,
@@ -24,6 +25,7 @@ describe("Dusk contract-call envelope", () => {
       fnArgs: "0x223344",
     });
 
+    expect(encoded).toBe(duskL1WireFormats.duskContractCallV1.goldenVectorHex);
     expect(encoded).toBe(`0x0101${"11".repeat(32)}0003736574223344`);
     expect(decodeDuskContractCallEnvelope(encoded)).toEqual({
       version: DUSK_CONTRACT_CALL_ENVELOPE_VERSION,

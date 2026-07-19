@@ -1,18 +1,21 @@
 import { bytesToHex, hexToBytes, type Hex } from "viem";
 import { sdkError } from "../errors.js";
+import { duskL1WireFormats } from "../l1/dusk-contract-interface.js";
+
+const contractCallFormat = duskL1WireFormats.duskContractCallV1;
 
 /** Fixed L1 Messenger target identifying a Dusk contract-call envelope. */
-export const DUSK_CONTRACT_CALL_TARGET =
-  "0x6901e2c830a4e1ddf737f0cac91ed8e0694efde7" as const;
+export const DUSK_CONTRACT_CALL_TARGET: `0x${string}` = contractCallFormat.target;
 
 /** First supported Dusk contract-call envelope version. */
-export const DUSK_CONTRACT_CALL_ENVELOPE_VERSION = 1 as const;
+export const DUSK_CONTRACT_CALL_ENVELOPE_VERSION: 1 = contractCallFormat.version;
 
 /** Envelope kind for a zero-value call into a Dusk contract. */
-export const DUSK_CONTRACT_CALL_KIND = 1 as const;
+export const DUSK_CONTRACT_CALL_KIND: 1 = contractCallFormat.kind;
 
 /** Maximum Dusk entrypoint length accepted by the generic application route. */
-export const MAX_DUSK_CONTRACT_CALL_ENTRYPOINT_BYTES = 64;
+export const MAX_DUSK_CONTRACT_CALL_ENTRYPOINT_BYTES: 64 =
+  contractCallFormat.maxEntrypointBytes;
 
 /** Decoded L2-to-Dusk direct contract-call envelope. */
 export type DuskContractCallEnvelope = {
@@ -30,8 +33,8 @@ export type EncodeDuskContractCallEnvelopeOptions = {
   fnArgs?: Hex | Uint8Array;
 };
 
-const FIXED_HEADER_BYTES = 36;
-const CONTRACT_ID_BYTES = 32;
+const FIXED_HEADER_BYTES = contractCallFormat.fixedHeaderBytes;
+const CONTRACT_ID_BYTES = contractCallFormat.targetContractIdBytes;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -125,7 +128,7 @@ function normalizeContractId(contractId: Hex): Uint8Array {
 }
 
 function normalizeEntrypoint(value: string): Uint8Array {
-  if (value === "init" || value === "__constructor__") {
+  if (contractCallFormat.reservedEntrypoints.some((entrypoint) => entrypoint === value)) {
     throw sdkError("INVALID_ENVELOPE", "Dusk contract-call entrypoint is reserved");
   }
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {

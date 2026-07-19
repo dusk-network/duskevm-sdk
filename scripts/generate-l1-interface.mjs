@@ -135,7 +135,7 @@ export const duskL1ContractInterfaceSource = ${formatJson({
   interfaceDigestSha256: artifact.source.interfaceDigestSha256,
 })} as const;
 
-/** Public bridge recipient wire-format constants owned by the L1 contracts. */
+/** Public wire-format constants owned by the L1 contracts. */
 export const duskL1WireFormats = ${formatJson(artifact.wireFormats)} as const;
 
 /** Allowlisted Dusk L1 method signatures used by this SDK. */
@@ -208,7 +208,7 @@ function parseArtifact(text, artifactPath) {
 }
 
 function requireWireFormats(wireFormats) {
-  const formats = {
+  const numericFormats = {
     bridgeAssetRecipientV1: [
       "tag",
       "version",
@@ -220,8 +220,12 @@ function requireWireFormats(wireFormats) {
     nativeContractCreditV1: ["tag", "version", "contractIdBytes"],
   };
 
-  requireExactKeys(wireFormats, Object.keys(formats), "wire formats");
-  for (const [formatName, fields] of Object.entries(formats)) {
+  requireExactKeys(
+    wireFormats,
+    [...Object.keys(numericFormats), "duskContractCallV1"],
+    "wire formats"
+  );
+  for (const [formatName, fields] of Object.entries(numericFormats)) {
     const format = wireFormats[formatName];
     requireExactKeys(format, fields, `wireFormats.${formatName}`);
     for (const field of fields) {
@@ -242,6 +246,70 @@ function requireWireFormats(wireFormats) {
   }
   if (wireFormats.nativeContractCreditV1.contractIdBytes === 0) {
     throw new Error("Dusk L1 native-credit contract id length must be positive");
+  }
+
+  const contractCall = wireFormats.duskContractCallV1;
+  const contractCallFields = [
+    "target",
+    "version",
+    "kind",
+    "fixedHeaderBytes",
+    "targetContractIdBytes",
+    "entrypointLengthBytes",
+    "entrypointLengthEndianness",
+    "entrypointEncoding",
+    "maxEntrypointBytes",
+    "reservedEntrypoints",
+    "goldenVectorHex",
+  ];
+  requireExactKeys(contractCall, contractCallFields, "wireFormats.duskContractCallV1");
+  for (const field of [
+    "version",
+    "kind",
+    "fixedHeaderBytes",
+    "targetContractIdBytes",
+    "entrypointLengthBytes",
+    "maxEntrypointBytes",
+  ]) {
+    if (!Number.isSafeInteger(contractCall[field]) || contractCall[field] < 0) {
+      throw new Error(
+        `Dusk L1 public interface has invalid wireFormats.duskContractCallV1.${field}`
+      );
+    }
+  }
+  if (!/^0x[0-9a-f]{40}$/i.test(contractCall.target)) {
+    throw new Error("Dusk L1 contract-call target must be a 20-byte hex address");
+  }
+  if (!/^0x(?:[0-9a-f]{2})+$/i.test(contractCall.goldenVectorHex)) {
+    throw new Error("Dusk L1 contract-call golden vector must be non-empty byte hex");
+  }
+  if (
+    contractCall.fixedHeaderBytes !==
+    2 + contractCall.targetContractIdBytes + contractCall.entrypointLengthBytes
+  ) {
+    throw new Error("Dusk L1 contract-call fixed header is inconsistent with its fields");
+  }
+  if (contractCall.entrypointLengthBytes !== 2) {
+    throw new Error("Dusk L1 contract-call entrypoint length must use two bytes");
+  }
+  if (contractCall.entrypointLengthEndianness !== "big") {
+    throw new Error("Dusk L1 contract-call entrypoint length must be big-endian");
+  }
+  if (contractCall.entrypointEncoding !== "utf-8") {
+    throw new Error("Dusk L1 contract-call entrypoint must use UTF-8");
+  }
+  if (contractCall.targetContractIdBytes === 0 || contractCall.maxEntrypointBytes === 0) {
+    throw new Error("Dusk L1 contract-call payload lengths must be positive");
+  }
+  if (
+    !Array.isArray(contractCall.reservedEntrypoints) ||
+    contractCall.reservedEntrypoints.length === 0 ||
+    contractCall.reservedEntrypoints.some(
+      (entrypoint) => typeof entrypoint !== "string" || entrypoint.length === 0
+    ) ||
+    new Set(contractCall.reservedEntrypoints).size !== contractCall.reservedEntrypoints.length
+  ) {
+    throw new Error("Dusk L1 contract-call reserved entrypoints must be unique strings");
   }
 }
 

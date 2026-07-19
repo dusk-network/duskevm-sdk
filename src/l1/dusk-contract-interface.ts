@@ -4,11 +4,11 @@
 /** Source revision and digest for the imported public Dusk L1 interface. */
 export const duskL1ContractInterfaceSource = {
   "schemaVersion": 1,
-  "revision": "568bed93a884690f8f0b2a2aaf5269efce2803d2",
-  "interfaceDigestSha256": "28c13006a82c593886e6b755d70f56f350a5116428b8912afce5ea4d6f3ad6d2"
+  "revision": "c836a5c294e0a25b9c0cbe8e97a39afa351418cd",
+  "interfaceDigestSha256": "7a70510b4204440b3ced13beb67ff457d59cd34964d5c6d74ec890b0597e5871"
 } as const;
 
-/** Public bridge recipient wire-format constants owned by the L1 contracts. */
+/** Public wire-format constants owned by the L1 contracts. */
 export const duskL1WireFormats = {
   "bridgeAssetRecipientV1": {
     "tag": 2,
@@ -17,6 +17,22 @@ export const duskL1WireFormats = {
     "contractKind": 1,
     "rawPublicKeyBytes": 193,
     "contractIdBytes": 32
+  },
+  "duskContractCallV1": {
+    "target": "0x6901e2c830a4e1ddf737f0cac91ed8e0694efde7",
+    "version": 1,
+    "kind": 1,
+    "fixedHeaderBytes": 36,
+    "targetContractIdBytes": 32,
+    "entrypointLengthBytes": 2,
+    "entrypointLengthEndianness": "big",
+    "entrypointEncoding": "utf-8",
+    "maxEntrypointBytes": 64,
+    "reservedEntrypoints": [
+      "init",
+      "__constructor__"
+    ],
+    "goldenVectorHex": "0x010111111111111111111111111111111111111111111111111111111111111111110003736574223344"
   },
   "nativeContractCreditV1": {
     "tag": 32,
