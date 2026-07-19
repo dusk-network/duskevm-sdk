@@ -4,8 +4,8 @@
 /** Source revision and digest for the imported public Dusk L1 interface. */
 export const duskL1ContractInterfaceSource = {
   "schemaVersion": 1,
-  "revision": "c836a5c294e0a25b9c0cbe8e97a39afa351418cd",
-  "interfaceDigestSha256": "7a70510b4204440b3ced13beb67ff457d59cd34964d5c6d74ec890b0597e5871"
+  "revision": "fcaab88f965372f8047a8e0e18c95c3b519c625a",
+  "interfaceDigestSha256": "4ee760b205cc94e1edad9ceee76ab1755c62d2c98e1c97fd21cc197c58ca5200"
 } as const;
 
 /** Public wire-format constants owned by the L1 contracts. */
@@ -27,6 +27,7 @@ export const duskL1WireFormats = {
     "entrypointLengthBytes": 2,
     "entrypointLengthEndianness": "big",
     "entrypointEncoding": "utf-8",
+    "entrypointPattern": "^[A-Za-z_][A-Za-z0-9_]*$",
     "maxEntrypointBytes": 64,
     "reservedEntrypoints": [
       "init",

@@ -35,6 +35,7 @@ export type EncodeDuskContractCallEnvelopeOptions = {
 
 const FIXED_HEADER_BYTES = contractCallFormat.fixedHeaderBytes;
 const CONTRACT_ID_BYTES = contractCallFormat.targetContractIdBytes;
+const entrypointPattern = new RegExp(contractCallFormat.entrypointPattern);
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -131,7 +132,7 @@ function normalizeEntrypoint(value: string): Uint8Array {
   if (contractCallFormat.reservedEntrypoints.some((entrypoint) => entrypoint === value)) {
     throw sdkError("INVALID_ENVELOPE", "Dusk contract-call entrypoint is reserved");
   }
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
+  if (!entrypointPattern.test(value)) {
     throw sdkError("INVALID_ENVELOPE", "Invalid Dusk contract-call entrypoint name");
   }
 

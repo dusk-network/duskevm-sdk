@@ -258,6 +258,7 @@ function requireWireFormats(wireFormats) {
     "entrypointLengthBytes",
     "entrypointLengthEndianness",
     "entrypointEncoding",
+    "entrypointPattern",
     "maxEntrypointBytes",
     "reservedEntrypoints",
     "goldenVectorHex",
@@ -297,6 +298,18 @@ function requireWireFormats(wireFormats) {
   }
   if (contractCall.entrypointEncoding !== "utf-8") {
     throw new Error("Dusk L1 contract-call entrypoint must use UTF-8");
+  }
+  if (
+    typeof contractCall.entrypointPattern !== "string" ||
+    !contractCall.entrypointPattern.startsWith("^") ||
+    !contractCall.entrypointPattern.endsWith("$")
+  ) {
+    throw new Error("Dusk L1 contract-call entrypoint pattern must be anchored");
+  }
+  try {
+    new RegExp(contractCall.entrypointPattern);
+  } catch (error) {
+    throw new Error("Dusk L1 contract-call entrypoint pattern is invalid", { cause: error });
   }
   if (contractCall.targetContractIdBytes === 0 || contractCall.maxEntrypointBytes === 0) {
     throw new Error("Dusk L1 contract-call payload lengths must be positive");
