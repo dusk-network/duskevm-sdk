@@ -9,6 +9,11 @@ export const opContractsBedrockArtifactSource = {
   version: "0.17.3",
   artifacts: [
     {
+      "exportName": "l2CrossDomainMessengerAbi",
+      "source": "forge-artifacts/L2CrossDomainMessenger.sol/L2CrossDomainMessenger.json",
+      "compiler": "0.8.15+commit.e14f2714"
+    },
+    {
       "exportName": "l2StandardBridgeAbi",
       "source": "forge-artifacts/L2StandardBridge.sol/L2StandardBridge.json",
       "compiler": "0.8.15+commit.e14f2714"
@@ -25,6 +30,33 @@ export const opContractsBedrockArtifactSource = {
     }
   ],
 } as const;
+
+/** Allowlisted OP L2 cross-domain Messenger ABI. */
+export const l2CrossDomainMessengerAbi: DuskEvmAbi = [
+  {
+    "type": "function",
+    "name": "sendMessage",
+    "inputs": [
+      {
+        "name": "_target",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_message",
+        "type": "bytes",
+        "internalType": "bytes"
+      },
+      {
+        "name": "_minGasLimit",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "payable"
+  }
+] as const satisfies DuskEvmAbi;
 
 /** Allowlisted OP L2 standard bridge ABI. */
 export const l2StandardBridgeAbi: DuskEvmAbi = [

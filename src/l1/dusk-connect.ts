@@ -2,6 +2,7 @@ import { sdkError } from "../errors.js";
 import type { TransactionHash } from "../types.js";
 import type {
   DuskL1Client,
+  DuskL1ContractReader,
   DuskL1SubmittedTransaction,
   DuskL1TransactionReceipt,
   DuskL1TransactionRequest,
@@ -21,6 +22,7 @@ export type DuskConnectLikeWallet = {
 /** Options used to adapt a Dusk Connect-compatible wallet. */
 export type CreateDuskConnectL1ClientOptions = {
   maxGasPriceTransactions?: number;
+  readContract?: DuskL1ContractReader["readContract"];
 };
 
 /** Adapt a Dusk Connect-compatible wallet to the SDK's L1 client interface. */
@@ -47,6 +49,7 @@ export function createDuskConnectL1Client(
       }
       return normalizeReceipt(transactionHash, await wallet.waitForTxExecuted(transactionHash, waitOptions));
     },
+    ...(options.readContract === undefined ? {} : { readContract: options.readContract }),
   };
 }
 

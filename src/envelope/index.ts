@@ -1,7 +1,8 @@
 /**
- * Self-describing Dusk delivery-envelope codecs and diagnostics.
+ * Dusk deposit and contract-call envelope codecs.
  *
  * @module
  */
-export * from "./codec.js";
-export * from "./types.js";
+export * from "./contract-call.js";
+export * from "./deposit.js";
+export * from "./deposit-types.js";

@@ -1,7 +1,8 @@
 import { bls12_381 as bls12381 } from "@noble/curves/bls12-381";
-import { bytesToHex, hexToBytes, type Hex } from "viem";
+import { bytesToHex, hexToBytes, keccak256, type Hex } from "viem";
 import { sdkError } from "../errors.js";
 import { duskL1WireFormats } from "../l1/dusk-contract-interface.js";
+import type { EvmAddress } from "../types.js";
 
 const assetFormat = duskL1WireFormats.bridgeAssetRecipientV1;
 const nativeCreditFormat = duskL1WireFormats.nativeContractCreditV1;
@@ -26,6 +27,12 @@ const UINT64_MASK = (1n << 64n) - 1n;
 
 /** Hexadecimal or byte-array representation of a Dusk public key. */
 export type DuskPublicKeyBytes = Hex | Uint8Array;
+
+/** Decoded native DUSK contract-credit recipient metadata. */
+export type DuskNativeContractCredit = {
+  targetContractId: Hex;
+  payload: Hex;
+};
 
 /** Convert a canonical compressed Dusk BLS public key to raw affine coordinates. */
 export function compressedDuskBlsPublicKeyToRaw(
@@ -94,6 +101,30 @@ export function encodeDuskNativeContractCredit(
   return bytesToHex(
     concatBytes(Uint8Array.of(nativeCreditFormat.tag, nativeCreditFormat.version), id, payloadBytes)
   );
+}
+
+/** Decode canonical native-token contract-credit metadata. */
+export function decodeDuskNativeContractCredit(extraData: Hex): DuskNativeContractCredit {
+  const bytes = hexToBytes(validateDuskNativeContractCredit(extraData));
+  const targetStart = 2;
+  const payloadStart = targetStart + nativeCreditFormat.contractIdBytes;
+  return {
+    targetContractId: bytesToHex(bytes.subarray(targetStart, payloadStart)),
+    payload: bytesToHex(bytes.subarray(payloadStart)),
+  };
+}
+
+/** Return whether metadata uses the native contract-credit discriminator. */
+export function isDuskNativeContractCredit(extraData: Hex): boolean {
+  const bytes = hexToBytes(extraData);
+  return bytes[0] === nativeCreditFormat.tag;
+}
+
+/** Return the canonical 20-byte EVM address of a full Dusk contract identifier. */
+export function duskContractIdToEvmAddress(contractId: Hex): EvmAddress {
+  const id = bytesToHex(normalizeContractId(contractId, nativeCreditFormat.contractIdBytes));
+  const hash = keccak256(id);
+  return `0x${hash.slice(-40)}` as EvmAddress;
 }
 
 /** Validate and normalize a raw Dusk BLS public key. */

@@ -1,18 +1,18 @@
 import { sdkError } from "../errors.js";
 import type { Hex } from "../types.js";
 import type {
-  DeliveryEnvelopeDiagnostic,
-  DeliveryTargetKind,
-  DuskDeliveryEnvelope,
-  EncodeDuskDeliveryEnvelopeOptions,
-} from "./types.js";
+  DepositEnvelopeDiagnostic,
+  DepositTargetKind,
+  DuskDepositEnvelope,
+  EncodeDuskDepositEnvelopeOptions,
+} from "./deposit-types.js";
 
 const MAGIC = new Uint8Array([0x44, 0x45, 0x56, 0x4d]);
 const VERSION = 1;
 const MAX_U16 = 0xffff;
 const MAX_U32 = 0xffffffff;
 
-const TARGET_TO_CODE: Record<DeliveryTargetKind, number> = {
+const TARGET_TO_CODE: Record<DepositTargetKind, number> = {
   native: 1,
   contract: 2,
   bls: 3,
@@ -20,7 +20,7 @@ const TARGET_TO_CODE: Record<DeliveryTargetKind, number> = {
   raw: 255,
 };
 
-const CODE_TO_TARGET: Record<number, DeliveryTargetKind | undefined> = {
+const CODE_TO_TARGET: Record<number, DepositTargetKind | undefined> = {
   1: "native",
   2: "contract",
   3: "bls",
@@ -31,18 +31,18 @@ const CODE_TO_TARGET: Record<number, DeliveryTargetKind | undefined> = {
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
-/** Encode a version-one self-describing Dusk delivery envelope. */
-export function encodeDuskDeliveryEnvelope(options: EncodeDuskDeliveryEnvelopeOptions): Hex {
+/** Encode a version-one self-describing Dusk deposit envelope. */
+export function encodeDuskDepositEnvelope(options: EncodeDuskDepositEnvelopeOptions): Hex {
   const targetCode = TARGET_TO_CODE[options.target.kind];
   if (targetCode === undefined) {
-    throw sdkError("INVALID_ENVELOPE", `Unsupported delivery target kind: ${options.target.kind}`);
+    throw sdkError("INVALID_ENVELOPE", `Unsupported deposit target kind: ${options.target.kind}`);
   }
 
   const targetBytes = textEncoder.encode(options.target.value);
-  assertHeaderLength("Delivery target", targetBytes.length, MAX_U16);
+  assertHeaderLength("Deposit target", targetBytes.length, MAX_U16);
 
   const payloadBytes = bytesFromPayload(options.payload ?? "0x");
-  assertHeaderLength("Delivery payload", payloadBytes.length, MAX_U32);
+  assertHeaderLength("Deposit payload", payloadBytes.length, MAX_U32);
   const out = new Uint8Array(12 + targetBytes.length + payloadBytes.length);
   out.set(MAGIC, 0);
   out[4] = VERSION;
@@ -55,41 +55,46 @@ export function encodeDuskDeliveryEnvelope(options: EncodeDuskDeliveryEnvelopeOp
   return bytesToHex(out);
 }
 
-/** Decode and validate a Dusk delivery envelope. */
-export function decodeDuskDeliveryEnvelope(input: Hex | Uint8Array): DuskDeliveryEnvelope {
-  const diagnostic = inspectDuskDeliveryEnvelope(input);
+/** Decode and validate a Dusk deposit envelope. */
+export function decodeDuskDepositEnvelope(input: Hex | Uint8Array): DuskDepositEnvelope {
+  const diagnostic = inspectDuskDepositEnvelope(input);
   if (!diagnostic.ok) {
     throw sdkError("INVALID_ENVELOPE", diagnostic.errors.join("; "));
   }
-  return diagnostic.envelope;
+  return diagnostic.depositEnvelope;
 }
 
 /** Inspect an envelope without throwing for malformed input. */
-export function inspectDuskDeliveryEnvelope(input: Hex | Uint8Array): DeliveryEnvelopeDiagnostic {
+export function inspectDuskDepositEnvelope(input: Hex | Uint8Array): DepositEnvelopeDiagnostic {
   const raw = input instanceof Uint8Array ? input : hexToBytes(input);
   const rawHex = bytesToHex(raw);
   const warnings: string[] = [];
   const errors: string[] = [];
 
   if (raw.length < 12) {
-    return { ok: false, rawHex, errors: ["Envelope is shorter than the 12-byte header"], warnings };
+    return {
+      ok: false,
+      rawHex,
+      errors: ["Deposit envelope is shorter than the 12-byte header"],
+      warnings,
+    };
   }
 
   if (!hasMagic(raw)) {
-    return { ok: false, rawHex, errors: ["Envelope magic mismatch"], warnings };
+    return { ok: false, rawHex, errors: ["Deposit envelope magic mismatch"], warnings };
   }
 
   const version = raw[4];
-  if (version !== VERSION) errors.push(`Unsupported delivery envelope version: ${String(version)}`);
+  if (version !== VERSION) errors.push(`Unsupported deposit envelope version: ${String(version)}`);
 
   const targetKind = CODE_TO_TARGET[raw[5] ?? -1];
-  if (!targetKind) errors.push(`Unsupported delivery target code: ${String(raw[5])}`);
+  if (!targetKind) errors.push(`Unsupported deposit target code: ${String(raw[5])}`);
 
   const targetLength = readU16(raw, 6);
   const payloadLength = readU32(raw, 8);
   const expectedLength = 12 + targetLength + payloadLength;
   if (raw.length !== expectedLength) {
-    errors.push(`Envelope length mismatch: expected ${expectedLength} bytes, got ${raw.length}`);
+    errors.push(`Deposit envelope length mismatch: expected ${expectedLength} bytes, got ${raw.length}`);
   }
 
   if (errors.length > 0 || !targetKind) {
@@ -102,12 +107,12 @@ export function inspectDuskDeliveryEnvelope(input: Hex | Uint8Array): DeliveryEn
   const target = textDecoder.decode(raw.slice(targetStart, targetEnd));
   const payload = bytesToHex(raw.slice(targetEnd, payloadEnd));
 
-  if (target.length === 0) warnings.push("Delivery target is empty");
+  if (target.length === 0) warnings.push("Deposit target is empty");
 
   return {
     ok: true,
     rawHex,
-    envelope: {
+    depositEnvelope: {
       version: VERSION,
       target: {
         kind: targetKind,

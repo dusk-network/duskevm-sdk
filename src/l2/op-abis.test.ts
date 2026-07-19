@@ -1,6 +1,7 @@
 import type { Abi } from "viem";
 import { toEventSelector, toFunctionSelector } from "viem";
 import {
+  l2CrossDomainMessengerAbi,
   l2Erc721BridgeAbi,
   l2StandardBridgeAbi,
   l2ToL1MessagePasserAbi,
@@ -14,6 +15,7 @@ describe("generated OP L2 ABIs", () => {
       version: "0.17.3",
     });
     expect(opContractsBedrockArtifactSource.artifacts.map((artifact) => artifact.exportName)).toEqual([
+      "l2CrossDomainMessengerAbi",
       "l2StandardBridgeAbi",
       "l2Erc721BridgeAbi",
       "l2ToL1MessagePasserAbi",
@@ -21,6 +23,14 @@ describe("generated OP L2 ABIs", () => {
   });
 
   it("contains the bridge and message-passer surface used by the SDK", () => {
+    expect(
+      hasAbiFunction(
+        l2CrossDomainMessengerAbi,
+        "sendMessage",
+        ["address", "bytes", "uint32"],
+        "payable"
+      )
+    ).toBe(true);
     expect(
       hasAbiFunction(
         l2StandardBridgeAbi,
@@ -72,6 +82,9 @@ describe("generated OP L2 ABIs", () => {
   });
 
   it("preserves the SDK-observed function selectors and event topics", () => {
+    expect(functionSelector(l2CrossDomainMessengerAbi, "sendMessage")).toBe(
+      toFunctionSelector("sendMessage(address,bytes,uint32)")
+    );
     expect(functionSelector(l2StandardBridgeAbi, "bridgeETHTo")).toBe(
       toFunctionSelector("bridgeETHTo(address,uint32,bytes)")
     );

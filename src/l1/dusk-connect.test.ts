@@ -75,4 +75,21 @@ describe("Dusk Connect L1 client adapter", () => {
 
     await expect(client.getGasPriceLux?.()).resolves.toBe(123n);
   });
+
+  it("passes an application-provided read adapter through to bridge workflows", async () => {
+    const readContract = vi.fn(async () => ["state"]);
+    const client = createDuskConnectL1Client(
+      {
+        async sendTransaction() {
+          return "hash";
+        },
+      },
+      { readContract }
+    );
+
+    await expect(
+      client.readContract?.({ contractId: "bridge", method: "nativeCredit", args: ["0x01"] })
+    ).resolves.toEqual(["state"]);
+    expect(readContract).toHaveBeenCalledOnce();
+  });
 });

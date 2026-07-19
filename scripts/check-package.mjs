@@ -90,6 +90,13 @@ try {
     for (const entrypoint of entrypoints) await import(entrypoint);
     const sdk = await import("@dusk/evm-sdk");
     if (sdk.parseDuskToLux("1.5") !== 1500000000n) throw new Error("amount smoke failed");
+    const message = sdk.prepareDuskEvmContractCall({
+      messengerContractId: "11".repeat(32),
+      target: "0x2222222222222222222222222222222222222222",
+      payload: "0x1234",
+    });
+    if (message.l1Transaction.method !== "sendMessage") throw new Error("XDM method smoke failed");
+    if ("amountLux" in message.l1Transaction) throw new Error("XDM value boundary failed");
   `;
   run("node", ["--input-type=module", "--eval", nodeSmoke], consumerRoot);
   run(

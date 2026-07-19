@@ -4,6 +4,10 @@ import { sdkError } from "./errors.js";
 export const LUX_DECIMALS = 9;
 /** Number of Lux in one DUSK. */
 export const LUX_PER_DUSK = 1_000_000_000n;
+/** Number of EVM wei represented by one Dusk Lux at the native bridge boundary. */
+export const WEI_PER_LUX = 1_000_000_000n;
+/** Largest native bridge amount representable by Dusk's u64 Lux transfer type. */
+export const MAX_LUX_AMOUNT = (1n << 64n) - 1n;
 
 /** Parse a non-negative decimal DUSK amount into integer Lux. */
 export function parseDuskToLux(value: string): bigint {
@@ -48,4 +52,16 @@ export function toLux(value: bigint | number | string): bigint {
   }
   if (!/^\d+$/.test(value)) throw sdkError("INVALID_AMOUNT", `Invalid Lux amount: ${value}`);
   return BigInt(value);
+}
+
+/** Convert an EVM wei amount into an exact Dusk Lux amount for native contract credits. */
+export function weiToLuxExact(value: bigint): bigint {
+  if (value < 0n || value % WEI_PER_LUX !== 0n) {
+    throw sdkError("INVALID_AMOUNT", "Native contract-credit value must convert to exact Lux");
+  }
+  const lux = value / WEI_PER_LUX;
+  if (lux > MAX_LUX_AMOUNT) {
+    throw sdkError("INVALID_AMOUNT", "Native contract-credit value exceeds the Dusk u64 Lux limit");
+  }
+  return lux;
 }

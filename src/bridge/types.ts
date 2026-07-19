@@ -1,5 +1,5 @@
 import type { Hex } from "viem";
-import type { DuskDeliveryEnvelope } from "../envelope/index.js";
+import type { DuskDepositEnvelope } from "../envelope/index.js";
 import type {
   DuskL1Client,
   DuskL1SubmittedTransaction,
@@ -46,8 +46,8 @@ export type BridgeOperationIntent = {
   id: string;
   direction: BridgeDirection;
   asset: BridgeAsset;
-  envelope: DuskDeliveryEnvelope;
-  envelopeHex: Hex;
+  depositEnvelope: DuskDepositEnvelope;
+  depositEnvelopeHex: Hex;
   gas?: BridgeOperationGas;
   metadata: Record<string, JsonValue>;
 };

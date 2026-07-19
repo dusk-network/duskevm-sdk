@@ -6,4 +6,5 @@
 export * from "./bindings.js";
 export * from "./chains.js";
 export * from "./client.js";
+export * from "./contract-call.js";
 export * from "./types.js";

@@ -32,6 +32,18 @@ export type DuskL1TransactionReceipt = {
   raw?: unknown;
 };
 
+/** Read-only Dusk contract request understood by SDK query adapters. */
+export type DuskL1ContractReadRequest = {
+  contractId: string;
+  method: string;
+  args?: JsonValue;
+};
+
+/** Minimal read surface used for authoritative Dusk contract state. */
+export type DuskL1ContractReader = {
+  readContract(request: DuskL1ContractReadRequest): Promise<unknown>;
+};
+
 /** Cancellation and timing controls for receipt polling. */
 export type WaitForDuskTransactionOptions = Abortable & {
   timeoutMs?: number;
@@ -46,6 +58,7 @@ export type DuskL1Client = {
     transactionHash: TransactionHash,
     options?: WaitForDuskTransactionOptions
   ): Promise<DuskL1TransactionReceipt>;
+  readContract?(request: DuskL1ContractReadRequest): Promise<unknown>;
 };
 
 /** Function that maps an SDK operation to a Dusk transaction request. */

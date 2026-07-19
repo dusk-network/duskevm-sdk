@@ -2,6 +2,22 @@
 
 Notable changes to `@dusk/evm-sdk` are documented here.
 
+## Unreleased
+
+- Add full-`ContractId`, entrypoint, and raw Piecrust argument routing for
+  zero-value L2-to-Dusk calls without receiver registration or a mandatory
+  callback, plus OP Messenger transaction preparation.
+- Add typed preparation and submission for zero-value Dusk-to-DuskEVM contract
+  calls through the deployment's Dusk L1 Cross Domain Messenger.
+- Rename the existing SDK delivery envelope and bridge operation fields to
+  identify them explicitly as deposit metadata.
+- Keep bridge value transfers, asset recipients, and native contract credits
+  separate from arbitrary application calls.
+- Add native contract-credit withdrawal preparation, authenticated OP message
+  parsing, authoritative L1 state reads, lifecycle status, and claim submission.
+- Preserve DRC20 amounts as raw atomic units and require L2 representations to
+  use the corresponding DRC20 display decimals.
+
 ## 0.1.0-beta.3
 
 - Track deposits from the Dusk adapter receipt to the deterministically derived

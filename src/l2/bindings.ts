@@ -10,11 +10,16 @@ import { normalizeUint256 } from "../uint256.js";
 import { l2Erc721BridgeAbi, l2StandardBridgeAbi } from "./op-abis.js";
 import type { DuskEvmAbi } from "./types.js";
 export {
+  l2CrossDomainMessengerAbi,
   l2Erc721BridgeAbi,
   l2StandardBridgeAbi,
   l2ToL1MessagePasserAbi,
   opContractsBedrockArtifactSource,
 } from "./op-abis.js";
+
+/** OP L2 cross-domain Messenger predeploy address. */
+export const L2_CROSS_DOMAIN_MESSENGER_ADDRESS =
+  "0x4200000000000000000000000000000000000007" as const;
 
 /** OP L2 standard bridge predeploy address. */
 export const L2_STANDARD_BRIDGE_ADDRESS =

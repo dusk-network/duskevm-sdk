@@ -1,4 +1,3 @@
-import { keccak256, stringToHex } from "viem";
 import { createBridgeClient } from "./client.js";
 
 const DRC20_ID = `0x${"ab".repeat(32)}` as const;
@@ -16,24 +15,15 @@ describe("bridge client", () => {
 
     expect(prepared.direction).toBe("l1-to-l2");
     expect(prepared.asset).toEqual({ kind: "native", amountLux: 10n });
-    expect(prepared.envelope.target).toEqual({
+    expect(prepared.depositEnvelope.target).toEqual({
       kind: "evm",
       value: "0x1111111111111111111111111111111111111111",
     });
+    expect(prepared.depositEnvelopeHex).toBe(
+      "0x4445564d0104002a00000000307831313131313131313131313131313131313131313131313131313131313131313131313131313131"
+    );
     expect(prepared.id).toBe(
-      `deposit:${keccak256(
-        stringToHex(
-          JSON.stringify({
-            envelopeHex: prepared.envelopeHex,
-            prefix: "deposit",
-            recipient: "0x1111111111111111111111111111111111111111",
-            asset: {
-              kind: "native",
-              amountLux: "10",
-            },
-          })
-        )
-      )}`
+      "deposit:0x842bb8baf4682fb84e3d032ce317e017b90369d4a1f9566a48d07d30bc821026"
     );
   });
 
@@ -93,8 +83,8 @@ describe("bridge client", () => {
 
     expect(drc20.asset.kind).toBe("drc20");
     expect(drc721.asset.kind).toBe("drc721");
-    expect(drc20.envelope.target.kind).toBe("evm");
-    expect(drc721.envelope.target.kind).toBe("evm");
+    expect(drc20.depositEnvelope.target.kind).toBe("evm");
+    expect(drc721.depositEnvelope.target.kind).toBe("evm");
   });
 
   it("does not collide when DRC721 string fields contain delimiters", () => {
@@ -219,14 +209,14 @@ describe("bridge client", () => {
 
     expect(uppercaseDrc20.id).toBe(canonicalDrc20.id);
     expect(uppercaseDrc20.asset).toEqual(canonicalDrc20.asset);
-    expect(uppercaseDrc20.envelopeHex).toBe(canonicalDrc20.envelopeHex);
+    expect(uppercaseDrc20.depositEnvelopeHex).toBe(canonicalDrc20.depositEnvelopeHex);
     expect(uppercaseDrc20.metadata.l2Recipient).toBe(l2Recipient);
     expect(await bridge.buildL1Transaction(uppercaseDrc20)).toEqual(
       await bridge.buildL1Transaction(canonicalDrc20)
     );
     expect(uppercaseDrc721.id).toBe(canonicalDrc721.id);
     expect(uppercaseDrc721.asset).toEqual(canonicalDrc721.asset);
-    expect(uppercaseDrc721.envelopeHex).toBe(canonicalDrc721.envelopeHex);
+    expect(uppercaseDrc721.depositEnvelopeHex).toBe(canonicalDrc721.depositEnvelopeHex);
     expect(uppercaseDrc721.metadata.l2Recipient).toBe(l2Recipient);
     expect(await bridge.buildL1Transaction(uppercaseDrc721)).toEqual(
       await bridge.buildL1Transaction(canonicalDrc721)

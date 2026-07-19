@@ -12,6 +12,18 @@ const artifactRoot = path.dirname(artifactPackageJsonPath);
 
 const artifacts = [
   {
+    exportName: "l2CrossDomainMessengerAbi",
+    source: "forge-artifacts/L2CrossDomainMessenger.sol/L2CrossDomainMessenger.json",
+    fragments: [
+      {
+        type: "function",
+        name: "sendMessage",
+        inputs: ["address", "bytes", "uint32"],
+        stateMutability: "payable",
+      },
+    ],
+  },
+  {
     exportName: "l2StandardBridgeAbi",
     source: "forge-artifacts/L2StandardBridge.sol/L2StandardBridge.json",
     fragments: [
@@ -178,6 +190,7 @@ function formatJson(value, continuationIndent = 0) {
 
 function abiDocumentation(exportName) {
   const descriptions = {
+    l2CrossDomainMessengerAbi: "Allowlisted OP L2 cross-domain Messenger ABI.",
     l2StandardBridgeAbi: "Allowlisted OP L2 standard bridge ABI.",
     l2Erc721BridgeAbi: "Allowlisted OP L2 ERC721 bridge ABI.",
     l2ToL1MessagePasserAbi: "Allowlisted OP L2-to-L1 message passer ABI.",

@@ -4,11 +4,11 @@
 /** Source revision and digest for the imported public Dusk L1 interface. */
 export const duskL1ContractInterfaceSource = {
   "schemaVersion": 1,
-  "revision": "b39613569e35e03e1d7f9937ce6bb4e838a797ef",
-  "interfaceDigestSha256": "98ccf77cf5be61b4dc9d297fb6a13a90058f0dc0922d30daeffb729a0a27cab4"
+  "revision": "fcaab88f965372f8047a8e0e18c95c3b519c625a",
+  "interfaceDigestSha256": "4ee760b205cc94e1edad9ceee76ab1755c62d2c98e1c97fd21cc197c58ca5200"
 } as const;
 
-/** Public bridge recipient wire-format constants owned by the L1 contracts. */
+/** Public wire-format constants owned by the L1 contracts. */
 export const duskL1WireFormats = {
   "bridgeAssetRecipientV1": {
     "tag": 2,
@@ -17,6 +17,23 @@ export const duskL1WireFormats = {
     "contractKind": 1,
     "rawPublicKeyBytes": 193,
     "contractIdBytes": 32
+  },
+  "duskContractCallV1": {
+    "target": "0x6901e2c830a4e1ddf737f0cac91ed8e0694efde7",
+    "version": 1,
+    "kind": 1,
+    "fixedHeaderBytes": 36,
+    "targetContractIdBytes": 32,
+    "entrypointLengthBytes": 2,
+    "entrypointLengthEndianness": "big",
+    "entrypointEncoding": "utf-8",
+    "entrypointPattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+    "maxEntrypointBytes": 64,
+    "reservedEntrypoints": [
+      "init",
+      "__constructor__"
+    ],
+    "goldenVectorHex": "0x010111111111111111111111111111111111111111111111111111111111111111110003736574223344"
   },
   "nativeContractCreditV1": {
     "tag": 32,
@@ -27,6 +44,27 @@ export const duskL1WireFormats = {
 
 /** Allowlisted Dusk L1 method signatures used by this SDK. */
 export const duskL1ContractMethods = {
+  "l1CrossDomainMessenger": {
+    "sendMessage": {
+      "name": "sendMessage",
+      "stateMutability": "write",
+      "inputs": [
+        {
+          "name": "target",
+          "rustType": "EVMAddress"
+        },
+        {
+          "name": "message",
+          "rustType": "Vec < u8 >"
+        },
+        {
+          "name": "min_gas_limit",
+          "rustType": "u32"
+        }
+      ],
+      "output": "()"
+    }
+  },
   "l1StandardBridge": {
     "depositETHToWithValue": {
       "name": "depositETHToWithValue",
@@ -81,6 +119,32 @@ export const duskL1ContractMethods = {
         }
       ],
       "output": "()"
+    },
+    "claimNativeCredit": {
+      "name": "claimNativeCredit",
+      "stateMutability": "write",
+      "inputs": [
+        {
+          "name": "credit_id",
+          "rustType": "Bytes32"
+        },
+        {
+          "name": "payload",
+          "rustType": "Vec < u8 >"
+        }
+      ],
+      "output": "bool"
+    },
+    "nativeCredit": {
+      "name": "nativeCredit",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "credit_id",
+          "rustType": "Bytes32"
+        }
+      ],
+      "output": "(Bytes32 , EVMAddress , u64 , Bytes32 , u8)"
     }
   },
   "l1Erc721Bridge": {

@@ -39,7 +39,7 @@ export function buildBridgeL1Transaction(
           l2Recipient(operation),
           operation.asset.amountLux.toString(),
           minGasLimit(operation, options),
-          operation.envelopeHex,
+          operation.depositEnvelopeHex,
         ],
       };
     case "drc20":
@@ -73,7 +73,7 @@ function tokenBridgeArgs(
     encodeDrcRegistryExtraData({
       kind: asset.kind,
       duskContractId: asset.duskContractId,
-      payload: operation.envelopeHex,
+      payload: operation.depositEnvelopeHex,
     }),
   ];
 }

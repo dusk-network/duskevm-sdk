@@ -1,16 +1,28 @@
-import { decodeDuskDeliveryEnvelope, encodeDuskDeliveryEnvelope } from "../envelope/index.js";
+import { decodeDuskDepositEnvelope, encodeDuskDepositEnvelope } from "../envelope/index.js";
 import { sdkError } from "../errors.js";
 import { normalizeEvmAddress } from "../evm-address.js";
 import {
   submitDuskL1Transaction,
+  type DuskL1ContractReader,
+  type DuskL1SubmitOptions,
   type DuskL1SubmittedTransaction,
   type DuskL1TransactionRequest,
+  type SubmittedDuskL1Transaction,
 } from "../l1/index.js";
 import type { BridgeOperationStatus } from "../status/index.js";
-import type { EvmAddress, JsonValue } from "../types.js";
+import type { EvmAddress, Hex, JsonValue } from "../types.js";
 import { normalizeDuskContractIdHex } from "./extradata.js";
 import { createBridgeL1TransactionBuilder } from "./l1-builder.js";
 import { createBridgeOperationId } from "./operation-id.js";
+import {
+  buildClaimNativeCreditTransaction,
+  observeNativeCredit as observeNativeCreditState,
+  readNativeCredit as readNativeCreditState,
+  submitClaimNativeCredit,
+  type ClaimNativeCreditParams,
+  type NativeCredit,
+  type NativeCreditTrackingMetadata,
+} from "./native-credit.js";
 import {
   submittedBridgeOperationStatus,
   waitForBridgeOperationStatus,
@@ -18,9 +30,11 @@ import {
 import {
   prepareDrc20Withdrawal,
   prepareDrc721Withdrawal,
+  prepareNativeContractCreditWithdrawal,
   prepareNativeWithdrawal,
   type Drc20WithdrawalParams,
   type Drc721WithdrawalParams,
+  type NativeContractCreditWithdrawalParams,
   type NativeWithdrawalParams,
   type PreparedWithdrawalOperation,
 } from "./withdrawal.js";
@@ -40,6 +54,9 @@ export type BridgeClient = {
   prepareDrc20Deposit(params: Drc20DepositParams): PreparedBridgeOperation;
   prepareDrc721Deposit(params: Drc721DepositParams): PreparedBridgeOperation;
   prepareNativeWithdrawal(params: NativeWithdrawalParams): PreparedWithdrawalOperation;
+  prepareNativeContractCreditWithdrawal(
+    params: NativeContractCreditWithdrawalParams
+  ): PreparedWithdrawalOperation;
   prepareDrc20Withdrawal(params: Drc20WithdrawalParams): PreparedWithdrawalOperation;
   prepareDrc721Withdrawal(params: Drc721WithdrawalParams): PreparedWithdrawalOperation;
   buildL1Transaction(operation: PreparedBridgeOperation): Promise<DuskL1TransactionRequest>;
@@ -47,6 +64,17 @@ export type BridgeClient = {
   submitNativeDeposit(params: NativeDepositParams): Promise<SubmittedBridgeOperation>;
   submitDrc20Deposit(params: Drc20DepositParams): Promise<SubmittedBridgeOperation>;
   submitDrc721Deposit(params: Drc721DepositParams): Promise<SubmittedBridgeOperation>;
+  readNativeCredit(creditId: Hex): Promise<NativeCredit>;
+  observeNativeCredit(
+    creditId: Hex
+  ): Promise<BridgeOperationStatus<NativeCreditTrackingMetadata>>;
+  buildNativeCreditClaim(
+    params: Omit<ClaimNativeCreditParams, "bridgeContractId">
+  ): DuskL1TransactionRequest;
+  submitNativeCreditClaim(
+    params: Omit<ClaimNativeCreditParams, "bridgeContractId">,
+    submitOptions?: DuskL1SubmitOptions
+  ): Promise<SubmittedDuskL1Transaction>;
   waitForOperationStatus(
     operation: PreparedBridgeOperation,
     options?: WaitForBridgeOperationStatusOptions
@@ -114,6 +142,7 @@ export function createBridgeClient(options: CreateBridgeClientOptions = {}): Bri
       });
     },
     prepareNativeWithdrawal,
+    prepareNativeContractCreditWithdrawal,
     prepareDrc20Withdrawal,
     prepareDrc721Withdrawal,
     async buildL1Transaction(operation) {
@@ -138,6 +167,35 @@ export function createBridgeClient(options: CreateBridgeClientOptions = {}): Bri
     submitDrc721Deposit(params) {
       return submitBridgeOperation(options, bridge, bridge.prepareDrc721Deposit(params));
     },
+    readNativeCredit(creditId) {
+      return readNativeCreditState(requireL1Reader(options), {
+        bridgeContractId: requireStandardBridgeContractId(options),
+        creditId,
+      });
+    },
+    observeNativeCredit(creditId) {
+      return observeNativeCreditState(requireL1Reader(options), {
+        bridgeContractId: requireStandardBridgeContractId(options),
+        creditId,
+      });
+    },
+    buildNativeCreditClaim(params) {
+      return buildClaimNativeCreditTransaction({
+        ...params,
+        bridgeContractId: requireStandardBridgeContractId(options),
+      });
+    },
+    submitNativeCreditClaim(params, submitOptions) {
+      if (!options.l1) throw sdkError("UNSUPPORTED", "No Dusk L1 client configured");
+      return submitClaimNativeCredit(
+        options.l1,
+        {
+          ...params,
+          bridgeContractId: requireStandardBridgeContractId(options),
+        },
+        submitOptions
+      );
+    },
     async waitForOperationStatus(operation, waitOptions) {
       const observeOperationStatus = bridge.observeOperationStatus;
       if (!observeOperationStatus) {
@@ -154,6 +212,19 @@ export function createBridgeClient(options: CreateBridgeClientOptions = {}): Bri
   return bridge;
 }
 
+function requireStandardBridgeContractId(options: CreateBridgeClientOptions): string {
+  const contractId = options.contracts?.l1StandardBridgeContractId;
+  if (!contractId) throw sdkError("UNSUPPORTED", "L1 Standard Bridge contract id is required");
+  return contractId;
+}
+
+function requireL1Reader(options: CreateBridgeClientOptions): DuskL1ContractReader {
+  if (!options.l1?.readContract) {
+    throw sdkError("UNSUPPORTED", "The Dusk L1 client does not expose readContract");
+  }
+  return { readContract: options.l1.readContract.bind(options.l1) };
+}
+
 type DepositInput = {
   asset: PreparedBridgeOperation["asset"];
   l2Recipient: EvmAddress;
@@ -167,7 +238,7 @@ type DepositInput = {
 function prepareDeposit(input: DepositInput): PreparedBridgeOperation {
   const asset = normalizeBridgeAsset(input.asset);
   const l2Recipient = normalizeEvmAddress(input.l2Recipient, "Bridge L2 recipient");
-  const envelopeHex = encodeDuskDeliveryEnvelope({
+  const depositEnvelopeHex = encodeDuskDepositEnvelope({
     target: {
       kind: "evm",
       value: l2Recipient,
@@ -177,11 +248,11 @@ function prepareDeposit(input: DepositInput): PreparedBridgeOperation {
   const gas = depositGas(input);
 
   return {
-    id: depositOperationId(asset, l2Recipient, envelopeHex),
+    id: depositOperationId(asset, l2Recipient, depositEnvelopeHex),
     direction: "l1-to-l2",
     asset,
-    envelopeHex,
-    envelope: decodeDuskDeliveryEnvelope(envelopeHex),
+    depositEnvelopeHex,
+    depositEnvelope: decodeDuskDepositEnvelope(depositEnvelopeHex),
     ...(gas === undefined ? {} : { gas }),
     metadata: {
       ...(input.metadata ?? {}),
@@ -243,18 +314,22 @@ async function submitBridgeOperation(
 function depositOperationId(
   asset: PreparedBridgeOperation["asset"],
   recipient: string,
-  envelopeHex: `0x${string}`
+  depositEnvelopeHex: `0x${string}`
 ): string {
-  return createBridgeOperationId("deposit", depositOperationIdPayload(asset, recipient, envelopeHex));
+  return createBridgeOperationId(
+    "deposit",
+    depositOperationIdPayload(asset, recipient, depositEnvelopeHex)
+  );
 }
 
 function depositOperationIdPayload(
   asset: PreparedBridgeOperation["asset"],
   recipient: string,
-  envelopeHex: `0x${string}`
+  depositEnvelopeHex: `0x${string}`
 ): JsonValue {
   const base = {
-    envelopeHex,
+    // Keep the beta.3 operation-ID preimage stable while clarifying the public field name.
+    envelopeHex: depositEnvelopeHex,
     prefix: "deposit",
     recipient: recipient.toLowerCase(),
   };
