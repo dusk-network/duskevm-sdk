@@ -18,7 +18,8 @@ export const DEFAULT_DUSK_CONTRACT_CALL_MIN_GAS_LIMIT = 150_000;
 /** Parameters for preparing a zero-value L2-to-Dusk contract call. */
 export type PrepareDuskContractCallOptions = {
   targetContractId: Hex;
-  entrypoint: string;
+  /** @deprecated The receiver is fixed by the protocol. Omit this field. */
+  entrypoint?: string;
   fnArgs?: Hex | Uint8Array;
   minGasLimit?: number;
   messengerAddress?: EvmAddress;

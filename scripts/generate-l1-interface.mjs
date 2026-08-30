@@ -217,6 +217,7 @@ function requireWireFormats(wireFormats) {
       "rawPublicKeyBytes",
       "contractIdBytes",
     ],
+    bridgeAssetRecipientV2: ["tag", "version", "externalKind", "eip2537G2Bytes"],
     nativeContractCreditV1: ["tag", "version", "contractIdBytes"],
   };
 
@@ -244,6 +245,15 @@ function requireWireFormats(wireFormats) {
   if (asset.rawPublicKeyBytes === 0 || asset.contractIdBytes === 0) {
     throw new Error("Dusk L1 asset-recipient payload lengths must be positive");
   }
+  const assetV2 = wireFormats.bridgeAssetRecipientV2;
+  if (
+    assetV2.tag !== asset.tag ||
+    assetV2.version === asset.version ||
+    assetV2.externalKind !== asset.externalKind ||
+    assetV2.eip2537G2Bytes !== 256
+  ) {
+    throw new Error("Dusk L1 V2 asset-recipient format is inconsistent");
+  }
   if (wireFormats.nativeContractCreditV1.contractIdBytes === 0) {
     throw new Error("Dusk L1 native-credit contract id length must be positive");
   }
@@ -255,12 +265,7 @@ function requireWireFormats(wireFormats) {
     "kind",
     "fixedHeaderBytes",
     "targetContractIdBytes",
-    "entrypointLengthBytes",
-    "entrypointLengthEndianness",
-    "entrypointEncoding",
-    "entrypointPattern",
-    "maxEntrypointBytes",
-    "reservedEntrypoints",
+    "receiverEntrypoint",
     "goldenVectorHex",
   ];
   requireExactKeys(contractCall, contractCallFields, "wireFormats.duskContractCallV1");
@@ -269,8 +274,6 @@ function requireWireFormats(wireFormats) {
     "kind",
     "fixedHeaderBytes",
     "targetContractIdBytes",
-    "entrypointLengthBytes",
-    "maxEntrypointBytes",
   ]) {
     if (!Number.isSafeInteger(contractCall[field]) || contractCall[field] < 0) {
       throw new Error(
@@ -284,45 +287,17 @@ function requireWireFormats(wireFormats) {
   if (!/^0x(?:[0-9a-f]{2})+$/i.test(contractCall.goldenVectorHex)) {
     throw new Error("Dusk L1 contract-call golden vector must be non-empty byte hex");
   }
-  if (
-    contractCall.fixedHeaderBytes !==
-    2 + contractCall.targetContractIdBytes + contractCall.entrypointLengthBytes
-  ) {
+  if (contractCall.fixedHeaderBytes !== 2 + contractCall.targetContractIdBytes) {
     throw new Error("Dusk L1 contract-call fixed header is inconsistent with its fields");
   }
-  if (contractCall.entrypointLengthBytes !== 2) {
-    throw new Error("Dusk L1 contract-call entrypoint length must use two bytes");
-  }
-  if (contractCall.entrypointLengthEndianness !== "big") {
-    throw new Error("Dusk L1 contract-call entrypoint length must be big-endian");
-  }
-  if (contractCall.entrypointEncoding !== "utf-8") {
-    throw new Error("Dusk L1 contract-call entrypoint must use UTF-8");
-  }
   if (
-    typeof contractCall.entrypointPattern !== "string" ||
-    !contractCall.entrypointPattern.startsWith("^") ||
-    !contractCall.entrypointPattern.endsWith("$")
+    typeof contractCall.receiverEntrypoint !== "string" ||
+    contractCall.receiverEntrypoint.length === 0
   ) {
-    throw new Error("Dusk L1 contract-call entrypoint pattern must be anchored");
+    throw new Error("Dusk L1 contract-call receiver entrypoint must be non-empty");
   }
-  try {
-    new RegExp(contractCall.entrypointPattern);
-  } catch (error) {
-    throw new Error("Dusk L1 contract-call entrypoint pattern is invalid", { cause: error });
-  }
-  if (contractCall.targetContractIdBytes === 0 || contractCall.maxEntrypointBytes === 0) {
+  if (contractCall.targetContractIdBytes === 0) {
     throw new Error("Dusk L1 contract-call payload lengths must be positive");
-  }
-  if (
-    !Array.isArray(contractCall.reservedEntrypoints) ||
-    contractCall.reservedEntrypoints.length === 0 ||
-    contractCall.reservedEntrypoints.some(
-      (entrypoint) => typeof entrypoint !== "string" || entrypoint.length === 0
-    ) ||
-    new Set(contractCall.reservedEntrypoints).size !== contractCall.reservedEntrypoints.length
-  ) {
-    throw new Error("Dusk L1 contract-call reserved entrypoints must be unique strings");
   }
 }
 

@@ -14,12 +14,11 @@ console.log(decoded.target);
 ```ts
 import { prepareDuskContractCall } from "@dusk/evm-sdk";
 
-const fnArgs = await targetContract.encode("record_value", { value: "42" });
+const payload = new TextEncoder().encode(JSON.stringify({ value: "42" }));
 const contractCall = prepareDuskContractCall({
   targetContractId:
     "0x1212121212121212121212121212121212121212121212121212121212121212",
-  entrypoint: "record_value",
-  fnArgs,
+  fnArgs: payload,
   minGasLimit: 150_000,
 });
 
@@ -30,8 +29,8 @@ await walletClient.sendTransaction({
 });
 ```
 
-`fnArgs` is the target data driver's normal Piecrust encoding for the selected
-entrypoint. This operation cannot carry value. Use the bridge withdrawal
+`fnArgs` is the opaque byte payload passed to the target's fixed
+`dusk_xdm_execute(Vec<u8>)` receiver. This operation cannot carry value. Use the bridge withdrawal
 helpers for DUSK, DRC20, or DRC721 transfers.
 
 ## Submit a Dusk-to-L2 Contract Call

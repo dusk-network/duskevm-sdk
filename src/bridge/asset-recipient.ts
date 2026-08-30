@@ -4,16 +4,19 @@ import { sdkError } from "../errors.js";
 import { duskL1WireFormats } from "../l1/dusk-contract-interface.js";
 import type { EvmAddress } from "../types.js";
 
-const assetFormat = duskL1WireFormats.bridgeAssetRecipientV1;
+const assetFormatV1 = duskL1WireFormats.bridgeAssetRecipientV1;
+const assetFormatV2 = duskL1WireFormats.bridgeAssetRecipientV2;
 const nativeCreditFormat = duskL1WireFormats.nativeContractCreditV1;
 
 /** Byte length of a compressed Dusk BLS public key. */
 export const DUSK_COMPRESSED_BLS_PUBLIC_KEY_BYTES = 96;
 /** Byte length of the raw BLS key encoded in a bridge recipient. */
-export const DUSK_RAW_BLS_PUBLIC_KEY_BYTES: number = assetFormat.rawPublicKeyBytes;
-/** Total byte length of a version-one external bridge recipient. */
+export const DUSK_RAW_BLS_PUBLIC_KEY_BYTES: number = assetFormatV1.rawPublicKeyBytes;
+/** Byte length of an EIP-2537 uncompressed G2 public key. */
+export const DUSK_EIP2537_G2_PUBLIC_KEY_BYTES: number = assetFormatV2.eip2537G2Bytes;
+/** Total byte length of a version-two external bridge recipient. */
 export const DUSK_EXTERNAL_ASSET_RECIPIENT_BYTES: number =
-  3 + DUSK_RAW_BLS_PUBLIC_KEY_BYTES;
+  3 + DUSK_EIP2537_G2_PUBLIC_KEY_BYTES;
 
 const BLS12_381_FP_MODULUS = BigInt(
   "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab"
@@ -71,21 +74,51 @@ export function compressedDuskBlsPublicKeyToRaw(
 export function encodeDuskExternalAssetRecipient(
   accountPublicKey: DuskPublicKeyBytes
 ): Hex {
-  const raw = compressedDuskBlsPublicKeyToRaw(accountPublicKey);
+  const encoded = compressedDuskBlsPublicKeyToEip2537(accountPublicKey);
   return bytesToHex(
     concatBytes(
-      Uint8Array.of(assetFormat.tag, assetFormat.version, assetFormat.externalKind),
-      raw
+      Uint8Array.of(assetFormatV2.tag, assetFormatV2.version, assetFormatV2.externalKind),
+      encoded
     )
+  );
+}
+
+/** Convert a compressed Dusk BLS public key to the EIP-2537 G2 point format. */
+export function compressedDuskBlsPublicKeyToEip2537(
+  accountPublicKey: DuskPublicKeyBytes
+): Uint8Array {
+  const compressed = normalizeBytes(
+    accountPublicKey,
+    DUSK_COMPRESSED_BLS_PUBLIC_KEY_BYTES,
+    "Dusk account public key"
+  );
+
+  let point;
+  try {
+    point = bls12381.G2.ProjectivePoint.fromHex(compressed);
+    point.assertValidity();
+    if (point.equals(bls12381.G2.ProjectivePoint.ZERO)) {
+      throw new Error("point at infinity");
+    }
+  } catch (error) {
+    throw sdkError("INVALID_OPERATION", "Dusk account public key is not valid BLS12-381", error);
+  }
+
+  const { x, y } = point.toAffine();
+  return concatBytes(
+    encodeFpEip2537(x.c0),
+    encodeFpEip2537(x.c1),
+    encodeFpEip2537(y.c0),
+    encodeFpEip2537(y.c1)
   );
 }
 
 /** Encode a Dusk contract identifier as canonical asset-recipient metadata. */
 export function encodeDuskContractAssetRecipient(contractId: Hex): Hex {
-  const id = normalizeContractId(contractId, assetFormat.contractIdBytes);
+  const id = normalizeContractId(contractId, assetFormatV1.contractIdBytes);
   return bytesToHex(
     concatBytes(
-      Uint8Array.of(assetFormat.tag, assetFormat.version, assetFormat.contractKind),
+      Uint8Array.of(assetFormatV1.tag, assetFormatV1.version, assetFormatV1.contractKind),
       id
     )
   );
@@ -165,15 +198,28 @@ export function validateRawDuskBlsPublicKey(
 /** Validate canonical external-account or contract asset-recipient metadata. */
 export function validateDuskAssetRecipient(extraData: Hex): Hex {
   const bytes = normalizeHex(extraData, "Dusk asset recipient");
-  if (bytes[0] !== assetFormat.tag || bytes[1] !== assetFormat.version) {
-    throw sdkError("INVALID_OPERATION", "Dusk asset recipient has an unsupported tag or version");
+  if (
+    bytes[0] !== assetFormatV1.tag ||
+    (bytes[1] !== assetFormatV1.version && bytes[1] !== assetFormatV2.version)
+  ) {
+    throw sdkError(
+      "INVALID_OPERATION",
+      "Dusk asset recipient has an unsupported tag or version"
+    );
   }
-
-  if (bytes[2] === assetFormat.externalKind) {
+  if (
+    bytes[0] === assetFormatV2.tag &&
+    bytes[1] === assetFormatV2.version &&
+    bytes[2] === assetFormatV2.externalKind
+  ) {
     requireLength(bytes, DUSK_EXTERNAL_ASSET_RECIPIENT_BYTES, "Dusk external asset recipient");
-    validateRawDuskBlsPublicKey(bytes.subarray(3));
-  } else if (bytes[2] === assetFormat.contractKind) {
-    requireLength(bytes, 3 + assetFormat.contractIdBytes, "Dusk contract asset recipient");
+    validateEip2537DuskBlsPublicKey(bytes.subarray(3));
+  } else if (
+    bytes[0] === assetFormatV1.tag &&
+    bytes[1] === assetFormatV1.version &&
+    bytes[2] === assetFormatV1.contractKind
+  ) {
+    requireLength(bytes, 3 + assetFormatV1.contractIdBytes, "Dusk contract asset recipient");
     requireNonZero(bytes.subarray(3), "Dusk contract asset recipient");
   } else {
     throw sdkError("INVALID_OPERATION", "Dusk asset recipient has an unsupported kind");
@@ -204,13 +250,56 @@ export function validateDuskNativeWithdrawalRecipient(extraData: Hex): Hex {
   }
 
   const recipient = validateDuskAssetRecipient(extraData);
-  if (bytes[2] !== assetFormat.externalKind) {
+  if (bytes[1] !== assetFormatV2.version || bytes[2] !== assetFormatV2.externalKind) {
     throw sdkError(
       "INVALID_OPERATION",
       "Dusk native withdrawal recipient must be an external account or native contract credit"
     );
   }
   return recipient;
+}
+
+/** Validate an EIP-2537 uncompressed G2 public key. */
+export function validateEip2537DuskBlsPublicKey(
+  accountPublicKey: DuskPublicKeyBytes
+): Uint8Array {
+  const encoded = normalizeBytes(
+    accountPublicKey,
+    DUSK_EIP2537_G2_PUBLIC_KEY_BYTES,
+    "Dusk EIP-2537 account public key"
+  );
+  try {
+    const coordinates = [0, 64, 128, 192].map((offset) => decodeFpEip2537(encoded, offset));
+    const point = bls12381.G2.ProjectivePoint.fromAffine({
+      x: { c0: coordinates[0]!, c1: coordinates[1]! },
+      y: { c0: coordinates[2]!, c1: coordinates[3]! },
+    });
+    point.assertValidity();
+    if (point.equals(bls12381.G2.ProjectivePoint.ZERO)) throw new Error("point at infinity");
+  } catch (error) {
+    throw sdkError("INVALID_OPERATION", "Dusk EIP-2537 account public key is not valid BLS12-381", error);
+  }
+
+  return encoded;
+}
+
+function encodeFpEip2537(value: bigint): Uint8Array {
+  const out = new Uint8Array(64);
+  let remaining = value;
+  for (let index = out.length - 1; index >= 16; index--) {
+    out[index] = Number(remaining & 0xffn);
+    remaining >>= 8n;
+  }
+  return out;
+}
+
+function decodeFpEip2537(value: Uint8Array, offset: number): bigint {
+  let decoded = 0n;
+  for (let index = 0; index < 64; index++) {
+    decoded = (decoded << 8n) | BigInt(value[offset + index]!);
+  }
+  if (decoded >= BLS12_381_FP_MODULUS) throw new Error("field element is out of range");
+  return decoded;
 }
 
 function encodeFpMontgomeryRaw(value: bigint): Uint8Array {

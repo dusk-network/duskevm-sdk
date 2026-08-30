@@ -101,14 +101,14 @@ wallet cannot claim a Dusk contract's sender identity.
 For DuskEVM-to-Dusk calls, `prepareDuskContractCall` encodes:
 
 ```text
-version:u8 || kind:u8 || target_contract_id:[32] || entrypoint_len:u16 ||
-entrypoint:ASCII || fn_args:bytes
+version:u8 || kind:u8 || target_contract_id:[32] || payload:bytes
 ```
 
 It then prepares `L2CrossDomainMessenger.sendMessage` to the fixed Dusk
-contract-call discriminator. The complete Dusk `ContractId`, entrypoint, and
-exact Piecrust arguments are message-bound; no mutable EVM-address mapping,
-receiver registry, or mandatory callback is involved.
+contract-call discriminator. The complete Dusk `ContractId` and opaque payload
+are message-bound; no mutable EVM-address mapping or receiver registry is
+involved. Applications opt in by exposing the fixed `dusk_xdm_execute(Vec<u8>)`
+receiver.
 
 Neither typed application helper includes transaction value. The public SDK
 interface exposes only zero-value `sendMessage` on the Dusk Messenger;
