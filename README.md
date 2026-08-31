@@ -36,6 +36,10 @@ not replace the DuskEVM adapter, op-node, Rusk, or wallet software.
 The `bridge` withdrawal helpers validate canonical Dusk recipient metadata.
 The lower-level `l2` encoding exports are raw OP ABI primitives for advanced
 callers and intentionally do not apply those bridge-specific checks.
+Using those raw exports with empty or invalid withdrawal `extraData` can create
+an OP withdrawal whose Dusk L1 payout can never succeed: the recipient payload
+is committed on L2 and cannot be repaired while proving or retrying it. Use the
+typed `bridge` withdrawal helpers for native, DRC20, and DRC721 transfers.
 
 Application contract calls and bridge transfers are separate SDK operations.
 Neither `prepareDuskContractCall` nor `prepareDuskEvmContractCall` can attach
