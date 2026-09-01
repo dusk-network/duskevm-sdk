@@ -15,6 +15,7 @@ The initial package is a single TypeScript package with internal modules:
 - `bridge`: cross-layer operation intent helpers, Dusk bridge transaction
   builders, and status metadata.
 - `status`: polling and resumable operation status primitives.
+- `xdm`: generic message submission, proof discovery, lifecycle, and replay.
 
 Keeping one package avoids premature publishing overhead. The public subpath
 exports keep the door open to split packages later if consumers need lighter
@@ -101,14 +102,14 @@ wallet cannot claim a Dusk contract's sender identity.
 For DuskEVM-to-Dusk calls, `prepareDuskContractCall` encodes:
 
 ```text
-version:u8 || kind:u8 || target_contract_id:[32] || entrypoint_len:u16 ||
-entrypoint:ASCII || fn_args:bytes
+version:u8 || kind:u8 || target_contract_id:[32] || payload:bytes
 ```
 
 It then prepares `L2CrossDomainMessenger.sendMessage` to the fixed Dusk
-contract-call discriminator. The complete Dusk `ContractId`, entrypoint, and
-exact Piecrust arguments are message-bound; no mutable EVM-address mapping,
-receiver registry, or mandatory callback is involved.
+contract-call discriminator. The complete Dusk `ContractId` and payload are
+message-bound; no mutable EVM-address mapping or receiver registry is involved.
+The native target opts in through the fixed `dusk_xdm_execute(Vec<u8>)`
+receiver and authenticates the Messenger plus `xDomainMessageSender()`.
 
 Neither typed application helper includes transaction value. The public SDK
 interface exposes only zero-value `sendMessage` on the Dusk Messenger;
@@ -130,15 +131,16 @@ credit without moving custody. A later `claimNativeCredit` call transfers the
 bound amount through `receive_from_bridge`; rejection leaves the credit pending
 and a successful claim is terminal.
 
-Permissionless target entrypoints execute normally. Targets that authorize an
-EVM identity authenticate the immediate Messenger and read the original L2
-sender from Messenger context. Missing entrypoints, malformed arguments, and
-contract failures become replayable message failures; ordinary return bytes are
-ignored, matching EVM call-success semantics.
+The fixed receiver returns normally only after accepting the message and traps
+to reject it. Missing receivers, malformed arguments, and contract failures
+become replayable message failures; ordinary return bytes are ignored, matching
+EVM call-success semantics.
 
-The SDK does not choose a dispute game, fetch `eth_getProof`, decide output-root
-validity, or resolve games. Those observations come from op-node/L2/Rusk
-integration code and are passed into the SDK's L1 request builders.
+The SDK can fetch `eth_getProof`, reconstruct the OP output root, and scan the
+respected game type through a caller-supplied Dusk contract reader. It accepts a
+candidate only when the computed root equals the committed game root claim. It
+does not create canonical state or replace Rusk, the adapter, op-node, or fault
+proof resolution.
 
 The L1 request method metadata is generated from an allowlisted public
 interface produced by the private contracts repository. The application

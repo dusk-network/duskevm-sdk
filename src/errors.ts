@@ -6,6 +6,7 @@ export type DuskEvmSdkErrorCode =
   | "TIMEOUT"
   | "TRANSACTION_FAILED"
   | "USER_REJECTED"
+  | "UNAVAILABLE"
   | "UNSUPPORTED"
   | "CLIENT_ERROR";
 

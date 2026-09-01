@@ -4,9 +4,12 @@ Notable changes to `@dusk/evm-sdk` are documented here.
 
 ## Unreleased
 
-- Add full-`ContractId`, entrypoint, and raw Piecrust argument routing for
-  zero-value L2-to-Dusk calls without receiver registration or a mandatory
-  callback, plus OP Messenger transaction preparation.
+- Add full-`ContractId` and opaque payload routing to the fixed
+  `dusk_xdm_execute` receiver for zero-value L2-to-Dusk calls, without target
+  registration or 20-byte address mapping.
+- Add generic XDM deployment validation, L2 submission, dispute-game proof
+  discovery, Portal maturity state, delivery tracking, and exact-message
+  replay helpers for both directions.
 - Add typed preparation and submission for zero-value Dusk-to-DuskEVM contract
   calls through the deployment's Dusk L1 Cross Domain Messenger.
 - Rename the existing SDK delivery envelope and bridge operation fields to

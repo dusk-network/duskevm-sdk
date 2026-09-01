@@ -4,8 +4,8 @@
 /** Source revision and digest for the imported public Dusk L1 interface. */
 export const duskL1ContractInterfaceSource = {
   "schemaVersion": 1,
-  "revision": "fcaab88f965372f8047a8e0e18c95c3b519c625a",
-  "interfaceDigestSha256": "4ee760b205cc94e1edad9ceee76ab1755c62d2c98e1c97fd21cc197c58ca5200"
+  "revision": "c6e7b5d5391994dc8e78f6c55b9899de963b6db3",
+  "interfaceDigestSha256": "6bd508239916a618e409431c05dd5ba9008e7306da360d63f84114abea43171f"
 } as const;
 
 /** Public wire-format constants owned by the L1 contracts. */
@@ -22,18 +22,10 @@ export const duskL1WireFormats = {
     "target": "0x6901e2c830a4e1ddf737f0cac91ed8e0694efde7",
     "version": 1,
     "kind": 1,
-    "fixedHeaderBytes": 36,
+    "fixedHeaderBytes": 34,
     "targetContractIdBytes": 32,
-    "entrypointLengthBytes": 2,
-    "entrypointLengthEndianness": "big",
-    "entrypointEncoding": "utf-8",
-    "entrypointPattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-    "maxEntrypointBytes": 64,
-    "reservedEntrypoints": [
-      "init",
-      "__constructor__"
-    ],
-    "goldenVectorHex": "0x010111111111111111111111111111111111111111111111111111111111111111110003736574223344"
+    "receiverEntrypoint": "dusk_xdm_execute",
+    "goldenVectorHex": "0x01011111111111111111111111111111111111111111111111111111111111111111223344"
   },
   "nativeContractCreditV1": {
     "tag": 32,
@@ -45,6 +37,48 @@ export const duskL1WireFormats = {
 /** Allowlisted Dusk L1 method signatures used by this SDK. */
 export const duskL1ContractMethods = {
   "l1CrossDomainMessenger": {
+    "failedMessages": {
+      "name": "failedMessages",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "msg_hash",
+          "rustType": "Bytes32"
+        }
+      ],
+      "output": "bool"
+    },
+    "relayMessage": {
+      "name": "relayMessage",
+      "stateMutability": "write",
+      "inputs": [
+        {
+          "name": "nonce",
+          "rustType": "U256"
+        },
+        {
+          "name": "sender",
+          "rustType": "EVMAddress"
+        },
+        {
+          "name": "target",
+          "rustType": "EVMAddress"
+        },
+        {
+          "name": "value",
+          "rustType": "U256"
+        },
+        {
+          "name": "min_gas_limit",
+          "rustType": "U256"
+        },
+        {
+          "name": "message",
+          "rustType": "Vec < u8 >"
+        }
+      ],
+      "output": "bool"
+    },
     "sendMessage": {
       "name": "sendMessage",
       "stateMutability": "write",
@@ -63,6 +97,66 @@ export const duskL1ContractMethods = {
         }
       ],
       "output": "()"
+    },
+    "successfulMessages": {
+      "name": "successfulMessages",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "msg_hash",
+          "rustType": "Bytes32"
+        }
+      ],
+      "output": "bool"
+    }
+  },
+  "disputeGameFactory": {
+    "findLatestGames": {
+      "name": "findLatestGames",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "game_type",
+          "rustType": "GameType"
+        },
+        {
+          "name": "start",
+          "rustType": "U256"
+        },
+        {
+          "name": "n",
+          "rustType": "U256"
+        }
+      ],
+      "output": "Vec < GameSearchResult >"
+    },
+    "gameAtIndex": {
+      "name": "gameAtIndex",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "index",
+          "rustType": "U256"
+        }
+      ],
+      "output": "(GameType , Timestamp , EVMAddress)"
+    },
+    "gameCount": {
+      "name": "gameCount",
+      "stateMutability": "read",
+      "inputs": [],
+      "output": "U256"
+    },
+    "gameMetadataAtIndex": {
+      "name": "gameMetadataAtIndex",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "index",
+          "rustType": "U256"
+        }
+      ],
+      "output": "(Claim , Hash , U256 , Vec < u8 >)"
     }
   },
   "l1StandardBridge": {
@@ -245,6 +339,23 @@ export const duskL1ContractMethods = {
       ],
       "output": "()"
     },
+    "finalizedWithdrawals": {
+      "name": "finalizedWithdrawals",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "withdrawal_hash",
+          "rustType": "Bytes32"
+        }
+      ],
+      "output": "bool"
+    },
+    "proofMaturityDelaySeconds": {
+      "name": "proofMaturityDelaySeconds",
+      "stateMutability": "read",
+      "inputs": [],
+      "output": "U256"
+    },
     "profileFinalizeWithdrawalTransaction": {
       "name": "profileFinalizeWithdrawalTransaction",
       "stateMutability": "write",
@@ -255,6 +366,27 @@ export const duskL1ContractMethods = {
         }
       ],
       "output": "FinalizeWithdrawalGasProfile"
+    },
+    "provenWithdrawals": {
+      "name": "provenWithdrawals",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "withdrawal_hash",
+          "rustType": "Bytes32"
+        },
+        {
+          "name": "proof_submitter",
+          "rustType": "EVMAddress"
+        }
+      ],
+      "output": "(EVMAddress , u64)"
+    },
+    "respectedGameType": {
+      "name": "respectedGameType",
+      "stateMutability": "read",
+      "inputs": [],
+      "output": "GameType"
     }
   }
 } as const;

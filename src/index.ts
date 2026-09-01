@@ -12,3 +12,4 @@ export * from "./l2/index.js";
 export * from "./sdk.js";
 export * from "./status/index.js";
 export * from "./types.js";
+export * from "./xdm/index.js";

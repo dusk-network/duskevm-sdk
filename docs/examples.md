@@ -14,12 +14,11 @@ console.log(decoded.target);
 ```ts
 import { prepareDuskContractCall } from "@dusk/evm-sdk";
 
-const fnArgs = await targetContract.encode("record_value", { value: "42" });
+const payload = await targetContract.encode("dusk_xdm_execute", applicationMessage);
 const contractCall = prepareDuskContractCall({
   targetContractId:
     "0x1212121212121212121212121212121212121212121212121212121212121212",
-  entrypoint: "record_value",
-  fnArgs,
+  payload,
   minGasLimit: 150_000,
 });
 
@@ -30,9 +29,9 @@ await walletClient.sendTransaction({
 });
 ```
 
-`fnArgs` is the target data driver's normal Piecrust encoding for the selected
-entrypoint. This operation cannot carry value. Use the bridge withdrawal
-helpers for DUSK, DRC20, or DRC721 transfers.
+`payload` is the target data driver's normal Piecrust encoding for the fixed
+`dusk_xdm_execute(Vec<u8>)` receiver. This operation cannot carry value. Use
+the bridge withdrawal helpers for DUSK, DRC20, or DRC721 transfers.
 
 ## Submit a Dusk-to-L2 Contract Call
 
@@ -243,8 +242,9 @@ await l1.submitTransaction(finalizeRequest);
 ```
 
 The SDK validates the `MessagePassed` withdrawal hash against the decoded event
-payload. It does not decide which dispute game is valid or fetch storage proofs;
-pass those observations in from your op-node/L2/Rusk integration.
+payload. `findWithdrawalProof` fetches the L2 block and storage proof, scans
+respected dispute games through `createWithdrawalGameReader`, and returns only
+a proof whose computed output root matches the game's committed root claim.
 
 ## Track Withdrawal Status
 

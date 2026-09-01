@@ -18,8 +18,7 @@ export const DEFAULT_DUSK_CONTRACT_CALL_MIN_GAS_LIMIT = 150_000;
 /** Parameters for preparing a zero-value L2-to-Dusk contract call. */
 export type PrepareDuskContractCallOptions = {
   targetContractId: Hex;
-  entrypoint: string;
-  fnArgs?: Hex | Uint8Array;
+  payload?: Hex | Uint8Array;
   minGasLimit?: number;
   messengerAddress?: EvmAddress;
 };
@@ -27,8 +26,7 @@ export type PrepareDuskContractCallOptions = {
 /** Persistable contract-call intent and its L2 Messenger transaction. */
 export type PreparedDuskContractCall = {
   targetContractId: Hex;
-  entrypoint: string;
-  fnArgs: Hex;
+  payload: Hex;
   minGasLimit: number;
   envelope: DuskContractCallEnvelope;
   envelopeHex: Hex;
@@ -52,8 +50,7 @@ export function prepareDuskContractCall(
 
   return {
     targetContractId: envelope.targetContractId,
-    entrypoint: envelope.entrypoint,
-    fnArgs: envelope.fnArgs,
+    payload: envelope.payload,
     minGasLimit,
     envelope,
     envelopeHex,

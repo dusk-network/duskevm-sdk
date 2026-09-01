@@ -61,6 +61,11 @@
       "types": "./dist/status/index.d.ts",
       "import": "./dist/status/index.js",
       "default": "./dist/status/index.js"
+    },
+    "./xdm": {
+      "types": "./dist/xdm/index.d.ts",
+      "import": "./dist/xdm/index.js",
+      "default": "./dist/xdm/index.js"
     }
   },
   "sideEffects": false,
@@ -83,6 +88,7 @@
     "release:verify": "npm run check:release-state && npm run check && npm publish --dry-run --ignore-scripts --access public --tag beta",
     "smoke:local": "npm run build && node scripts/local-bridge-smoke.mjs",
     "smoke:local:dry-run": "npm run build && node scripts/local-bridge-smoke.mjs --dry-run",
+    "smoke:local:xdm": "npm run build && node scripts/local-xdm-smoke.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit --pretty false"
   },

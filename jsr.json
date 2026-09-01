@@ -8,7 +8,8 @@
     "./envelope": "./src/envelope/index.ts",
     "./l1": "./src/l1/index.ts",
     "./l2": "./src/l2/index.ts",
-    "./status": "./src/status/index.ts"
+    "./status": "./src/status/index.ts",
+    "./xdm": "./src/xdm/index.ts"
   },
   "publish": {
     "include": [

@@ -19,6 +19,22 @@ const requiredContracts = {
   l1CrossDomainMessenger: {
     artifactName: "l1_cross_domain_messenger",
     methods: {
+      failedMessages: signature(
+        [["msg_hash", "Bytes32"]],
+        "bool",
+        "read"
+      ),
+      relayMessage: signature(
+        [
+          ["nonce", "U256"],
+          ["sender", "EVMAddress"],
+          ["target", "EVMAddress"],
+          ["value", "U256"],
+          ["min_gas_limit", "U256"],
+          ["message", "Vec < u8 >"],
+        ],
+        "bool"
+      ),
       sendMessage: signature(
         [
           ["target", "EVMAddress"],
@@ -26,6 +42,36 @@ const requiredContracts = {
           ["min_gas_limit", "u32"],
         ],
         "()"
+      ),
+      successfulMessages: signature(
+        [["msg_hash", "Bytes32"]],
+        "bool",
+        "read"
+      ),
+    },
+  },
+  disputeGameFactory: {
+    artifactName: "dispute_game_factory",
+    methods: {
+      findLatestGames: signature(
+        [
+          ["game_type", "GameType"],
+          ["start", "U256"],
+          ["n", "U256"],
+        ],
+        "Vec < GameSearchResult >",
+        "read"
+      ),
+      gameAtIndex: signature(
+        [["index", "U256"]],
+        "(GameType , Timestamp , EVMAddress)",
+        "read"
+      ),
+      gameCount: signature([], "U256", "read"),
+      gameMetadataAtIndex: signature(
+        [["index", "U256"]],
+        "(Claim , Hash , U256 , Vec < u8 >)",
+        "read"
       ),
     },
   },
@@ -113,10 +159,25 @@ const requiredContracts = {
         "()",
         "read"
       ),
+      finalizedWithdrawals: signature(
+        [["withdrawal_hash", "Bytes32"]],
+        "bool",
+        "read"
+      ),
+      proofMaturityDelaySeconds: signature([], "U256", "read"),
       profileFinalizeWithdrawalTransaction: signature(
         [["withdrawal", "WithdrawalTransaction"]],
         "FinalizeWithdrawalGasProfile"
       ),
+      provenWithdrawals: signature(
+        [
+          ["withdrawal_hash", "Bytes32"],
+          ["proof_submitter", "EVMAddress"],
+        ],
+        "(EVMAddress , u64)",
+        "read"
+      ),
+      respectedGameType: signature([], "GameType", "read"),
     },
   },
 };
@@ -255,12 +316,7 @@ function requireWireFormats(wireFormats) {
     "kind",
     "fixedHeaderBytes",
     "targetContractIdBytes",
-    "entrypointLengthBytes",
-    "entrypointLengthEndianness",
-    "entrypointEncoding",
-    "entrypointPattern",
-    "maxEntrypointBytes",
-    "reservedEntrypoints",
+    "receiverEntrypoint",
     "goldenVectorHex",
   ];
   requireExactKeys(contractCall, contractCallFields, "wireFormats.duskContractCallV1");
@@ -269,8 +325,6 @@ function requireWireFormats(wireFormats) {
     "kind",
     "fixedHeaderBytes",
     "targetContractIdBytes",
-    "entrypointLengthBytes",
-    "maxEntrypointBytes",
   ]) {
     if (!Number.isSafeInteger(contractCall[field]) || contractCall[field] < 0) {
       throw new Error(
@@ -286,43 +340,18 @@ function requireWireFormats(wireFormats) {
   }
   if (
     contractCall.fixedHeaderBytes !==
-    2 + contractCall.targetContractIdBytes + contractCall.entrypointLengthBytes
+    2 + contractCall.targetContractIdBytes
   ) {
     throw new Error("Dusk L1 contract-call fixed header is inconsistent with its fields");
   }
-  if (contractCall.entrypointLengthBytes !== 2) {
-    throw new Error("Dusk L1 contract-call entrypoint length must use two bytes");
-  }
-  if (contractCall.entrypointLengthEndianness !== "big") {
-    throw new Error("Dusk L1 contract-call entrypoint length must be big-endian");
-  }
-  if (contractCall.entrypointEncoding !== "utf-8") {
-    throw new Error("Dusk L1 contract-call entrypoint must use UTF-8");
-  }
-  if (
-    typeof contractCall.entrypointPattern !== "string" ||
-    !contractCall.entrypointPattern.startsWith("^") ||
-    !contractCall.entrypointPattern.endsWith("$")
-  ) {
-    throw new Error("Dusk L1 contract-call entrypoint pattern must be anchored");
-  }
-  try {
-    new RegExp(contractCall.entrypointPattern);
-  } catch (error) {
-    throw new Error("Dusk L1 contract-call entrypoint pattern is invalid", { cause: error });
-  }
-  if (contractCall.targetContractIdBytes === 0 || contractCall.maxEntrypointBytes === 0) {
+  if (contractCall.targetContractIdBytes === 0) {
     throw new Error("Dusk L1 contract-call payload lengths must be positive");
   }
   if (
-    !Array.isArray(contractCall.reservedEntrypoints) ||
-    contractCall.reservedEntrypoints.length === 0 ||
-    contractCall.reservedEntrypoints.some(
-      (entrypoint) => typeof entrypoint !== "string" || entrypoint.length === 0
-    ) ||
-    new Set(contractCall.reservedEntrypoints).size !== contractCall.reservedEntrypoints.length
+    typeof contractCall.receiverEntrypoint !== "string" ||
+    contractCall.receiverEntrypoint !== "dusk_xdm_execute"
   ) {
-    throw new Error("Dusk L1 contract-call reserved entrypoints must be unique strings");
+    throw new Error("Dusk L1 contract-call receiver entrypoint must be dusk_xdm_execute");
   }
 }
 

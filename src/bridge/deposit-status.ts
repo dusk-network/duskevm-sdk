@@ -42,6 +42,14 @@ export type DepositReceiptClient = {
   }): Promise<DepositTransactionReceipt>;
 };
 
+/** Adapter RPC surface that resolves a native Dusk ID to its Ethereum projection. */
+export type DuskTransactionProjectionClient = {
+  request(parameters: {
+    method: "duskevm_getTransactionHashByDuskHash";
+    params: readonly [Hex];
+  }): Promise<Hex | null>;
+};
+
 /** Persistable metadata returned while observing a bridge deposit. */
 export type DepositTrackingMetadata = Record<string, JsonValue> & {
   stage: DepositLifecycleStage;
@@ -77,6 +85,21 @@ export type WaitForDepositStatusOptions = ObserveDepositStatusOptions & {
   timeoutMs?: number;
   signal?: AbortSignal;
 };
+
+/** Resolve the canonical Ethereum-facing hash for a completed native Dusk transaction. */
+export async function resolveDuskTransactionHash(
+  client: DuskTransactionProjectionClient,
+  duskTransactionHash: string
+): Promise<Hex | null> {
+  const hash = normalizeTransactionHash(duskTransactionHash, "Dusk transaction hash");
+  const projected = await client.request({
+    method: "duskevm_getTransactionHashByDuskHash",
+    params: [hash],
+  });
+  return projected === null
+    ? null
+    : normalizeTransactionHash(projected, "projected Ethereum transaction hash");
+}
 
 const RELAYED_MESSAGE_TOPIC = keccak256(toBytes("RelayedMessage(bytes32)"));
 const FAILED_RELAYED_MESSAGE_TOPIC = keccak256(

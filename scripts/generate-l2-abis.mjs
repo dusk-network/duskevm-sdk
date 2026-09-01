@@ -21,6 +21,42 @@ const artifacts = [
         inputs: ["address", "bytes", "uint32"],
         stateMutability: "payable",
       },
+      {
+        type: "function",
+        name: "relayMessage",
+        inputs: ["uint256", "address", "address", "uint256", "uint256", "bytes"],
+        stateMutability: "payable",
+      },
+      {
+        type: "function",
+        name: "failedMessages",
+        inputs: ["bytes32"],
+        stateMutability: "view",
+      },
+      {
+        type: "function",
+        name: "successfulMessages",
+        inputs: ["bytes32"],
+        stateMutability: "view",
+      },
+      {
+        type: "event",
+        name: "SentMessage",
+        inputs: ["address", "address", "bytes", "uint256", "uint256"],
+        indexed: [true, false, false, false, false],
+      },
+      {
+        type: "event",
+        name: "FailedRelayedMessage",
+        inputs: ["bytes32"],
+        indexed: [true],
+      },
+      {
+        type: "event",
+        name: "RelayedMessage",
+        inputs: ["bytes32"],
+        indexed: [true],
+      },
     ],
   },
   {
