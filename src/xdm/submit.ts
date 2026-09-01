@@ -42,13 +42,11 @@ export type DuskEvmTransactionSender = (
 ) => Promise<TransactionHash>;
 
 /** Options for submitting and optionally confirming an L2-to-Dusk call. */
-type SubmitDuskContractCallBaseOptions = PrepareDuskContractCallOptions & {
+export type SubmitDuskContractCallOptions = PrepareDuskContractCallOptions & {
   publicClient: DuskContractCallPublicClient;
   sendTransaction: DuskEvmTransactionSender;
   expectedChainId: number;
-};
-
-export type SubmitDuskContractCallOptions = SubmitDuskContractCallBaseOptions &
+} &
   (
     | { wait?: false; l1MessengerAddress?: EvmAddress }
     | { wait: true; l1MessengerAddress: EvmAddress }
