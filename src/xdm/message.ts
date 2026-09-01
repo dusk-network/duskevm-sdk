@@ -75,10 +75,10 @@ export function parseCrossDomainMessageFromWithdrawal(
   return normalizeCrossDomainMessage({ nonce, sender, target, value, minGasLimit, message });
 }
 
-/** Parse the single SentMessage event emitted by a Messenger transaction. */
+/** Parse the single SentMessage event emitted by the specified Messenger. */
 export function parseSentMessageReceipt(
   receipt: EvmReceiptLike,
-  messengerAddress: EvmAddress = L2_CROSS_DOMAIN_MESSENGER_ADDRESS
+  messengerAddress: EvmAddress
 ): CrossDomainMessage {
   const expectedAddress = normalizeEvmAddress(
     messengerAddress,
@@ -290,10 +290,25 @@ export async function readDuskEvmMessageDeliveryState(params: {
       args: [messageHash],
     }),
   ]);
-  return deliveryState(messageHash, normalizeBoolean(successful), normalizeBoolean(failed));
+  return duskEvmDeliveryState(
+    messageHash,
+    normalizeBoolean(successful),
+    normalizeBoolean(failed)
+  );
 }
 
-/** Reduce Messenger flags to a single fail-closed delivery state. */
+/** Reduce OP L2 Messenger flags, where a successful replay retains failure history. */
+export function duskEvmDeliveryState(
+  messageHash: Hex,
+  successful: boolean,
+  failed: boolean
+): CrossDomainDeliveryState {
+  if (successful) return { state: "delivered", messageHash, replayable: false };
+  if (failed) return { state: "delivery_failed", messageHash, replayable: true };
+  return { state: "pending", messageHash, replayable: false };
+}
+
+/** Reduce native Dusk Messenger flags, which must never remain contradictory. */
 export function deliveryState(
   messageHash: Hex,
   successful: boolean,

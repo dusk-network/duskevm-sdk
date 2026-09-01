@@ -164,6 +164,7 @@ const requiredContracts = {
         "bool",
         "read"
       ),
+      paused: signature([], "bool", "read"),
       proofMaturityDelaySeconds: signature([], "U256", "read"),
       profileFinalizeWithdrawalTransaction: signature(
         [["withdrawal", "WithdrawalTransaction"]],

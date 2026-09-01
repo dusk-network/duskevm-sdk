@@ -9,9 +9,14 @@ import {
   type Hex,
 } from "viem";
 import {
+  L2_TO_L1_MESSAGE_PASSER_ADDRESS,
   L2_CROSS_DOMAIN_MESSENGER_ADDRESS,
   l2CrossDomainMessengerAbi,
+  l2ToL1MessagePasserAbi,
+  prepareDuskContractCall,
 } from "../l2/index.js";
+import { DUSK_CONTRACT_CALL_TARGET } from "../envelope/index.js";
+import { hashWithdrawal, type WithdrawalTransaction } from "../bridge/index.js";
 import {
   appendEmbeddedTerminalNode,
   buildDuskEvmMessageReplayTransaction,
@@ -19,6 +24,7 @@ import {
   buildWithdrawalOutputProof,
   createWithdrawalGameReader,
   deliveryState,
+  duskEvmDeliveryState,
   duskContractCallLifecycleStatus,
   findWithdrawalProof,
   hashDuskCrossDomainMessage,
@@ -104,20 +110,24 @@ describe("cross-domain message helpers", () => {
       ],
       [SENDER, "0x1234", 1n, 150_000n]
     );
-    const parsed = parseSentMessageReceipt({
-      logs: [
-        {
-          address: L2_CROSS_DOMAIN_MESSENGER_ADDRESS,
-          topics: topics as readonly Hex[],
-          data,
-        },
-      ],
-    });
+    const parsed = parseSentMessageReceipt(
+      {
+        logs: [
+          {
+            address: L2_CROSS_DOMAIN_MESSENGER_ADDRESS,
+            topics: topics as readonly Hex[],
+            data,
+          },
+        ],
+      },
+      L2_CROSS_DOMAIN_MESSENGER_ADDRESS
+    );
     expect(parsed).toEqual(MESSAGE);
     expect(() =>
-      parseSentMessageReceipt({
-        logs: [{ address: SENDER, topics: topics as readonly Hex[], data }],
-      })
+      parseSentMessageReceipt(
+        { logs: [{ address: SENDER, topics: topics as readonly Hex[], data }] },
+        L2_CROSS_DOMAIN_MESSENGER_ADDRESS
+      )
     ).toThrow(/No SentMessage/);
 
     const duskReplay = buildDuskMessageReplayTransaction({
@@ -145,6 +155,11 @@ describe("cross-domain message helpers", () => {
       replayable: true,
     });
     expect(() => deliveryState(hash, true, true)).toThrow(/both successful and failed/);
+    expect(duskEvmDeliveryState(hash, true, true)).toEqual({
+      state: "delivered",
+      messageHash: hash,
+      replayable: false,
+    });
   });
 
   it("queries each Messenger with its direction-specific message identity", async () => {
@@ -178,6 +193,19 @@ describe("cross-domain message helpers", () => {
       hashDuskEvmCrossDomainMessage(MESSAGE),
       hashDuskEvmCrossDomainMessage(MESSAGE),
     ]);
+  });
+
+  it("treats a successful L2 replay as delivered despite historical failure", async () => {
+    await expect(
+      readDuskEvmMessageDeliveryState({
+        message: MESSAGE,
+        client: {
+          async readContract() {
+            return true;
+          },
+        },
+      })
+    ).resolves.toMatchObject({ state: "delivered", replayable: false });
   });
 });
 
@@ -330,6 +358,71 @@ describe("submission and lifecycle", () => {
     ).resolves.toMatchObject({ chainId: 745 });
   });
 
+  it("binds confirmation to the prepared Dusk call instead of the first withdrawal", async () => {
+    const prepared = prepareDuskContractCall({
+      targetContractId: CONTRACT_ID,
+      payload: "0x1234",
+    });
+    const unrelated = preparedMessagePassedLog({
+      ...prepared,
+      envelopeHex: "0xabcd",
+    });
+    const matching = preparedMessagePassedLog(prepared);
+    const waitingClient = {
+      ...publicClient,
+      async waitForTransactionReceipt() {
+        return { status: "success" as const, logs: [unrelated, matching] };
+      },
+    };
+    await expect(
+      submitDuskContractCall({
+        publicClient: waitingClient,
+        sendTransaction: async () => TX_HASH,
+        expectedChainId: 745,
+        targetContractId: CONTRACT_ID,
+        payload: "0x1234",
+        l1MessengerAddress: TARGET,
+        wait: true,
+      })
+    ).resolves.toMatchObject({
+      transactionHash: TX_HASH,
+      withdrawal: { withdrawal: { sender: L2_CROSS_DOMAIN_MESSENGER_ADDRESS, target: TARGET } },
+      crossDomainMessage: {
+        target: DUSK_CONTRACT_CALL_TARGET,
+        message: prepared.envelopeHex,
+      },
+    });
+  });
+
+  it("rejects receipts with no unique prepared-intent match", async () => {
+    const prepared = prepareDuskContractCall({
+      targetContractId: CONTRACT_ID,
+      payload: "0x1234",
+    });
+    const submit = (logs: ReturnType<typeof preparedMessagePassedLog>[]) =>
+      submitDuskContractCall({
+        publicClient: {
+          ...publicClient,
+          async waitForTransactionReceipt() {
+            return { status: "success" as const, logs };
+          },
+        },
+        sendTransaction: async () => TX_HASH,
+        expectedChainId: 745,
+        targetContractId: CONTRACT_ID,
+        payload: "0x1234",
+        l1MessengerAddress: TARGET,
+        wait: true,
+      });
+    await expect(submit([preparedMessagePassedLog({ ...prepared, envelopeHex: "0xabcd" })]))
+      .rejects.toThrow(/matching the prepared Dusk call/);
+    const matching = preparedMessagePassedLog(prepared);
+    await expect(submit([matching, matching])).rejects.toThrow(/more than one/);
+    await expect(
+      submit([{ ...matching, transactionHash: `0x${"aa".repeat(32)}` }])
+    ).rejects.toThrow(/matching the prepared Dusk call/);
+  });
+
   it("resolves the native Dusk submission to its projected Ethereum receipt", async () => {
     const projectedHash = `0x${"aa".repeat(32)}` as Hex;
     const requestedReceipts: Hex[] = [];
@@ -392,6 +485,31 @@ describe("submission and lifecycle", () => {
       phase: "accepted",
       metadata: { stage: "delivery_failed", replayable: true },
     });
+    expect(
+      duskContractCallLifecycleStatus({
+        replayReceipt: { transactionHash: TX_HASH, success: true, finalized: true },
+        delivery: { state: "delivery_failed", messageHash, replayable: true },
+        now: () => 9,
+      })
+    ).toMatchObject({
+      phase: "accepted",
+      metadata: { stage: "delivery_failed", replayable: true },
+    });
+  });
+
+  it("does not call a successful but non-finalized L1 transaction finalized", () => {
+    expect(
+      duskContractCallLifecycleStatus({
+        finalizeReceipt: { transactionHash: TX_HASH, success: true, finalized: false },
+        now: () => 10,
+      })
+    ).toMatchObject({ phase: "accepted", metadata: { stage: "finalize_submitted" } });
+    expect(
+      duskContractCallLifecycleStatus({
+        finalizeReceipt: { transactionHash: TX_HASH, success: true, finalized: true },
+        now: () => 11,
+      })
+    ).toMatchObject({ phase: "accepted", metadata: { stage: "finalized" } });
   });
 
   it("tracks Portal proof maturity and authoritative finalizability", async () => {
@@ -403,6 +521,7 @@ describe("submission and lifecycle", () => {
         if (request.method === "finalizedWithdrawals") return false;
         if (request.method === "provenWithdrawals") return [GAME_PROXY, 100n];
         if (request.method === "proofMaturityDelaySeconds") return 30n;
+        if (request.method === "paused") return false;
         if (request.method === "checkWithdrawal") return null;
         throw new Error(`unexpected ${request.method}`);
       },
@@ -415,7 +534,7 @@ describe("submission and lifecycle", () => {
         proofSubmitter: SENDER,
         latestL1Timestamp: 129n,
       })
-    ).resolves.toMatchObject({ state: "proven_waiting", readyAt: 130n });
+    ).resolves.toMatchObject({ state: "proven_waiting", readyAt: 131n });
     await expect(
       readWithdrawalPortalState({
         reader,
@@ -424,10 +543,89 @@ describe("submission and lifecycle", () => {
         proofSubmitter: SENDER,
         latestL1Timestamp: 130n,
       })
-    ).resolves.toMatchObject({ state: "finalizable", finalizable: true });
+    ).resolves.toMatchObject({ state: "proven_waiting", finalizable: false, readyAt: 131n });
+    await expect(
+      readWithdrawalPortalState({
+        reader,
+        portalContractId: "portal",
+        withdrawalHash,
+        proofSubmitter: SENDER,
+        latestL1Timestamp: 131n,
+      })
+    ).resolves.toMatchObject({ state: "finalizable", finalizable: true, readyAt: 131n });
     expect(methods).toContain("checkWithdrawal");
   });
+
+  it("does not advertise finalization while the Portal is paused", async () => {
+    const withdrawalHash = `0x${"99".repeat(32)}` as Hex;
+    await expect(
+      readWithdrawalPortalState({
+        reader: {
+          async readContract(request) {
+            if (request.method === "finalizedWithdrawals") return false;
+            if (request.method === "provenWithdrawals") return [GAME_PROXY, 100n];
+            if (request.method === "proofMaturityDelaySeconds") return 30n;
+            if (request.method === "paused") return true;
+            throw new Error(`unexpected ${request.method}`);
+          },
+        },
+        portalContractId: "portal",
+        withdrawalHash,
+        proofSubmitter: SENDER,
+        latestL1Timestamp: 131n,
+      })
+    ).resolves.toMatchObject({
+      state: "proven_waiting",
+      finalizable: false,
+      reason: "OptimismPortal is paused",
+    });
+  });
 });
+
+function preparedMessagePassedLog(prepared: {
+  envelopeHex: Hex;
+  minGasLimit: number;
+}): {
+  address: typeof L2_TO_L1_MESSAGE_PASSER_ADDRESS;
+  topics: readonly Hex[];
+  data: Hex;
+  transactionHash?: Hex;
+} {
+  const relayData = encodeFunctionData({
+    abi: l2CrossDomainMessengerAbi,
+    functionName: "relayMessage",
+    args: [1n, SENDER, DUSK_CONTRACT_CALL_TARGET, 0n, BigInt(prepared.minGasLimit), prepared.envelopeHex],
+  });
+  const withdrawal: WithdrawalTransaction = {
+    nonce: 2n,
+    sender: L2_CROSS_DOMAIN_MESSENGER_ADDRESS,
+    target: TARGET,
+    value: 0n,
+    gasLimit: 300_000n,
+    data: relayData,
+  };
+  return {
+    address: L2_TO_L1_MESSAGE_PASSER_ADDRESS,
+    topics: encodeEventTopics({
+      abi: l2ToL1MessagePasserAbi,
+      eventName: "MessagePassed",
+      args: {
+        nonce: withdrawal.nonce,
+        sender: withdrawal.sender,
+        target: withdrawal.target,
+      },
+    }) as readonly Hex[],
+    data: encodeAbiParameters(
+      [
+        { type: "uint256" },
+        { type: "uint256" },
+        { type: "bytes" },
+        { type: "bytes32" },
+      ],
+      [withdrawal.value, withdrawal.gasLimit, withdrawal.data, hashWithdrawal(withdrawal)]
+    ),
+  };
+}
 
 function toU256Bytes(value: bigint): number[] {
   return Array.from(hexBytes(toHex(value, { size: 32 })));

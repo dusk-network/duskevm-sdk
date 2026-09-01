@@ -4,8 +4,8 @@
 /** Source revision and digest for the imported public Dusk L1 interface. */
 export const duskL1ContractInterfaceSource = {
   "schemaVersion": 1,
-  "revision": "c6e7b5d5391994dc8e78f6c55b9899de963b6db3",
-  "interfaceDigestSha256": "6bd508239916a618e409431c05dd5ba9008e7306da360d63f84114abea43171f"
+  "revision": "1afe5abcd3274142bad3ed26315098be33f33e41",
+  "interfaceDigestSha256": "1a59100274bfbbc2d5272e5cfdbe8b00283dbf1d8a8e744a5f7ed39534139826"
 } as const;
 
 /** Public wire-format constants owned by the L1 contracts. */
@@ -348,6 +348,12 @@ export const duskL1ContractMethods = {
           "rustType": "Bytes32"
         }
       ],
+      "output": "bool"
+    },
+    "paused": {
+      "name": "paused",
+      "stateMutability": "read",
+      "inputs": [],
       "output": "bool"
     },
     "proofMaturityDelaySeconds": {

@@ -115,7 +115,9 @@ export function duskContractCallLifecycleStatus(
       replayable: false,
     });
   }
-  if (input.replayTransactionHash || input.replayReceipt) {
+  const completedReplayStillFailed =
+    input.replayReceipt?.success === true && input.delivery?.state === "delivery_failed";
+  if ((input.replayTransactionHash || input.replayReceipt) && !completedReplayStillFailed) {
     const replayTransactionHash =
       input.replayTransactionHash ?? input.replayReceipt?.transactionHash;
     return makeStatus("submitted", "replay_submitted", now(), {
@@ -138,7 +140,10 @@ export function duskContractCallLifecycleStatus(
       "The native receiver rejected the message; the exact message can be replayed"
     );
   }
-  if (input.portalFinalized || input.finalizeReceipt?.success === true) {
+  if (
+    input.portalFinalized ||
+    (input.finalizeReceipt?.success === true && input.finalizeReceipt.finalized === true)
+  ) {
     return makeStatus(
       "accepted",
       "finalized",
@@ -222,7 +227,7 @@ export async function readWithdrawalPortalState(params: {
     }),
     "proof maturity delay"
   );
-  const readyAt = provenAt + maturity;
+  const readyAt = provenAt + maturity + 1n;
   if (params.latestL1Timestamp < readyAt) {
     return {
       state: "proven_waiting",
@@ -232,6 +237,24 @@ export async function readWithdrawalPortalState(params: {
       disputeGameProxy,
       readyAt,
       reason: "The proof maturity delay has not elapsed yet",
+    };
+  }
+
+  const paused = normalizeBoolean(
+    await params.reader.readContract({
+      contractId: params.portalContractId,
+      method: portalMethods.paused.name,
+    })
+  );
+  if (paused) {
+    return {
+      state: "proven_waiting",
+      finalized: false,
+      finalizable: false,
+      provenAt,
+      disputeGameProxy,
+      readyAt,
+      reason: "OptimismPortal is paused",
     };
   }
 

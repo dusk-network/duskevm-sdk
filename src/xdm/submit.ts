@@ -1,7 +1,7 @@
 import type { Hex } from "viem";
 import {
   observeDepositStatus,
-  parseMessagePassedReceipt,
+  parseMessagePassedLog,
   resolveDuskTransactionHash,
   type DepositReceiptClient,
   type DepositTrackingMetadata,
@@ -9,7 +9,9 @@ import {
   type EvmReceiptLike,
   type ParsedWithdrawalMessage,
 } from "../bridge/index.js";
+import { DUSK_CONTRACT_CALL_TARGET } from "../envelope/index.js";
 import { sdkError } from "../errors.js";
+import { normalizeEvmAddress } from "../evm-address.js";
 import {
   L2_CROSS_DOMAIN_MESSENGER_ADDRESS,
   prepareDuskContractCall,
@@ -44,6 +46,7 @@ export type SubmitDuskContractCallOptions = PrepareDuskContractCallOptions & {
   publicClient: DuskContractCallPublicClient;
   sendTransaction: DuskEvmTransactionSender;
   expectedChainId: number;
+  l1MessengerAddress?: EvmAddress;
   wait?: boolean;
 };
 
@@ -113,8 +116,22 @@ export async function submitDuskContractCall(
   if (receipt.status === "reverted" || receipt.status === "0x0") {
     throw sdkError("TRANSACTION_FAILED", "DuskEVM contract-call transaction reverted", receipt);
   }
-  const withdrawal = parseMessagePassedReceipt(receipt);
-  const crossDomainMessage = parseCrossDomainMessageFromWithdrawal(withdrawal.withdrawal);
+  if (
+    receipt.transactionHash &&
+    normalizeTransactionHash(receipt.transactionHash) !== transactionHash
+  ) {
+    throw sdkError(
+      "CLIENT_ERROR",
+      "DuskEVM client returned a receipt for a different transaction",
+      receipt
+    );
+  }
+  const { withdrawal, crossDomainMessage } = findPreparedDuskContractCall(
+    receipt,
+    prepared,
+    transactionHash,
+    options.l1MessengerAddress
+  );
   return {
     ...result,
     receipt,
@@ -122,6 +139,78 @@ export async function submitDuskContractCall(
     crossDomainMessage,
     messageHash: hashDuskCrossDomainMessage(crossDomainMessage),
   };
+}
+
+function findPreparedDuskContractCall(
+  receipt: EvmReceiptLike,
+  prepared: PreparedDuskContractCall,
+  transactionHash: Hex,
+  l1MessengerAddress?: EvmAddress
+): { withdrawal: ParsedWithdrawalMessage; crossDomainMessage: CrossDomainMessage } {
+  const expectedL2Messenger = normalizeAddress(prepared.l2Transaction.to);
+  const expectedL1Messenger = l1MessengerAddress
+    ? normalizeAddress(l1MessengerAddress)
+    : undefined;
+  const expectedTarget = normalizeAddress(DUSK_CONTRACT_CALL_TARGET);
+  let match:
+    | { withdrawal: ParsedWithdrawalMessage; crossDomainMessage: CrossDomainMessage }
+    | undefined;
+
+  for (const log of receipt.logs ?? []) {
+    const correlatedLog = { ...log };
+    const blockNumber = log.blockNumber ?? receipt.blockNumber;
+    if (blockNumber !== undefined) correlatedLog.blockNumber = blockNumber;
+    const observedTransactionHash = log.transactionHash ?? receipt.transactionHash;
+    if (observedTransactionHash !== undefined) {
+      correlatedLog.transactionHash = observedTransactionHash;
+    }
+    const parsed = parseMessagePassedLog(correlatedLog);
+    if (!parsed) continue;
+    if (
+      parsed.transactionHash &&
+      normalizeTransactionHash(parsed.transactionHash) !== transactionHash
+    ) {
+      continue;
+    }
+    if (normalizeAddress(parsed.withdrawal.sender) !== expectedL2Messenger) continue;
+    if (parsed.withdrawal.value !== 0n) continue;
+    if (
+      expectedL1Messenger &&
+      normalizeAddress(parsed.withdrawal.target) !== expectedL1Messenger
+    ) {
+      continue;
+    }
+
+    let message: CrossDomainMessage;
+    try {
+      message = parseCrossDomainMessageFromWithdrawal(parsed.withdrawal);
+    } catch {
+      continue;
+    }
+    if (
+      normalizeAddress(message.target) !== expectedTarget ||
+      message.message.toLowerCase() !== prepared.envelopeHex.toLowerCase() ||
+      message.value !== 0n ||
+      message.minGasLimit !== BigInt(prepared.minGasLimit)
+    ) {
+      continue;
+    }
+    if (match) {
+      throw sdkError(
+        "INVALID_OPERATION",
+        "Receipt contains more than one MessagePassed event matching the prepared Dusk call"
+      );
+    }
+    match = { withdrawal: parsed, crossDomainMessage: message };
+  }
+
+  if (!match) {
+    throw sdkError(
+      "INVALID_OPERATION",
+      "Receipt does not contain a MessagePassed event matching the prepared Dusk call"
+    );
+  }
+  return match;
 }
 
 /** Observe a Dusk-to-DuskEVM Messenger call using standard OP deposit tracking. */
@@ -197,4 +286,8 @@ function normalizeTransactionHash(value: TransactionHash): Hex {
     throw sdkError("CLIENT_ERROR", "DuskEVM wallet returned an invalid transaction hash", value);
   }
   return normalized.toLowerCase() as Hex;
+}
+
+function normalizeAddress(value: EvmAddress): string {
+  return normalizeEvmAddress(value, "cross-domain address").toLowerCase();
 }
