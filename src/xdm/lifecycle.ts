@@ -96,6 +96,25 @@ export function duskContractCallLifecycleStatus(
   const now = input.now ?? Date.now;
   const metadata = baseMetadata(input);
 
+  if (input.delivery?.state === "delivered") {
+    return makeStatus("finalized", "delivered", now(), {
+      ...metadata,
+      messageHash: input.delivery.messageHash,
+      replayable: false,
+    });
+  }
+  if (input.portalFinalized && input.delivery?.state !== "delivery_failed") {
+    return makeStatus(
+      "accepted",
+      "finalized",
+      now(),
+      {
+        ...metadata,
+        ...(input.delivery ? { messageHash: input.delivery.messageHash } : {}),
+      },
+      "The withdrawal is finalized; Messenger delivery confirmation is pending"
+    );
+  }
   if (input.failure || input.proveReceipt?.success === false || input.finalizeReceipt?.success === false) {
     return makeStatus("failed", "failed", now(), metadata, errorMessage(input.failure));
   }
@@ -107,13 +126,6 @@ export function duskContractCallLifecycleStatus(
       { ...metadata, replayable: true },
       "Cross-domain message replay transaction failed"
     );
-  }
-  if (input.delivery?.state === "delivered") {
-    return makeStatus("finalized", "delivered", now(), {
-      ...metadata,
-      messageHash: input.delivery.messageHash,
-      replayable: false,
-    });
   }
   const completedReplayStillFailed =
     input.replayReceipt?.success === true && input.delivery?.state === "delivery_failed";
@@ -141,8 +153,7 @@ export function duskContractCallLifecycleStatus(
     );
   }
   if (
-    input.portalFinalized ||
-    (input.finalizeReceipt?.success === true && input.finalizeReceipt.finalized === true)
+    input.finalizeReceipt?.success === true && input.finalizeReceipt.finalized === true
   ) {
     return makeStatus(
       "accepted",

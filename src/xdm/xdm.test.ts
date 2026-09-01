@@ -123,6 +123,17 @@ describe("cross-domain message helpers", () => {
       L2_CROSS_DOMAIN_MESSENGER_ADDRESS
     );
     expect(parsed).toEqual(MESSAGE);
+    expect(
+      parseSentMessageReceipt({
+        logs: [
+          {
+            address: L2_CROSS_DOMAIN_MESSENGER_ADDRESS,
+            topics: topics as readonly Hex[],
+            data,
+          },
+        ],
+      })
+    ).toEqual(MESSAGE);
     expect(() =>
       parseSentMessageReceipt(
         { logs: [{ address: SENDER, topics: topics as readonly Hex[], data }] },
@@ -508,6 +519,24 @@ describe("submission and lifecycle", () => {
       duskContractCallLifecycleStatus({
         finalizeReceipt: { transactionHash: TX_HASH, success: true, finalized: true },
         now: () => 11,
+      })
+    ).toMatchObject({ phase: "accepted", metadata: { stage: "finalized" } });
+  });
+
+  it("prefers authoritative terminal state over stale failed transaction receipts", () => {
+    const messageHash = hashDuskCrossDomainMessage(MESSAGE);
+    expect(
+      duskContractCallLifecycleStatus({
+        replayReceipt: { transactionHash: TX_HASH, success: false },
+        delivery: { state: "delivered", messageHash, replayable: false },
+        now: () => 12,
+      })
+    ).toMatchObject({ phase: "finalized", metadata: { stage: "delivered" } });
+    expect(
+      duskContractCallLifecycleStatus({
+        finalizeReceipt: { transactionHash: TX_HASH, success: false },
+        portalFinalized: true,
+        now: () => 13,
       })
     ).toMatchObject({ phase: "accepted", metadata: { stage: "finalized" } });
   });

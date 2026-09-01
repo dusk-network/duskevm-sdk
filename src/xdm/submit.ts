@@ -42,13 +42,17 @@ export type DuskEvmTransactionSender = (
 ) => Promise<TransactionHash>;
 
 /** Options for submitting and optionally confirming an L2-to-Dusk call. */
-export type SubmitDuskContractCallOptions = PrepareDuskContractCallOptions & {
+type SubmitDuskContractCallBaseOptions = PrepareDuskContractCallOptions & {
   publicClient: DuskContractCallPublicClient;
   sendTransaction: DuskEvmTransactionSender;
   expectedChainId: number;
-  l1MessengerAddress?: EvmAddress;
-  wait?: boolean;
 };
+
+export type SubmitDuskContractCallOptions = SubmitDuskContractCallBaseOptions &
+  (
+    | { wait?: false; l1MessengerAddress?: EvmAddress }
+    | { wait: true; l1MessengerAddress: EvmAddress }
+  );
 
 /** Result of an L2-to-Dusk application call submission. */
 export type SubmittedDuskContractCall = {
@@ -111,6 +115,12 @@ export async function submitDuskContractCall(
   );
   const result: SubmittedDuskContractCall = { prepared, transactionHash };
   if (!options.wait) return result;
+  if (!options.l1MessengerAddress) {
+    throw sdkError(
+      "INVALID_OPERATION",
+      "L1 cross-domain Messenger address is required when waiting for confirmation"
+    );
+  }
 
   const receipt = await options.publicClient.waitForTransactionReceipt({ hash: transactionHash });
   if (receipt.status === "reverted" || receipt.status === "0x0") {
@@ -145,12 +155,10 @@ function findPreparedDuskContractCall(
   receipt: EvmReceiptLike,
   prepared: PreparedDuskContractCall,
   transactionHash: Hex,
-  l1MessengerAddress?: EvmAddress
+  l1MessengerAddress: EvmAddress
 ): { withdrawal: ParsedWithdrawalMessage; crossDomainMessage: CrossDomainMessage } {
   const expectedL2Messenger = normalizeAddress(prepared.l2Transaction.to);
-  const expectedL1Messenger = l1MessengerAddress
-    ? normalizeAddress(l1MessengerAddress)
-    : undefined;
+  const expectedL1Messenger = normalizeAddress(l1MessengerAddress);
   const expectedTarget = normalizeAddress(DUSK_CONTRACT_CALL_TARGET);
   let match:
     | { withdrawal: ParsedWithdrawalMessage; crossDomainMessage: CrossDomainMessage }
@@ -174,10 +182,7 @@ function findPreparedDuskContractCall(
     }
     if (normalizeAddress(parsed.withdrawal.sender) !== expectedL2Messenger) continue;
     if (parsed.withdrawal.value !== 0n) continue;
-    if (
-      expectedL1Messenger &&
-      normalizeAddress(parsed.withdrawal.target) !== expectedL1Messenger
-    ) {
+    if (normalizeAddress(parsed.withdrawal.target) !== expectedL1Messenger) {
       continue;
     }
 

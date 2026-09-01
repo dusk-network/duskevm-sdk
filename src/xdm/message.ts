@@ -78,7 +78,7 @@ export function parseCrossDomainMessageFromWithdrawal(
 /** Parse the single SentMessage event emitted by the specified Messenger. */
 export function parseSentMessageReceipt(
   receipt: EvmReceiptLike,
-  messengerAddress: EvmAddress
+  messengerAddress: EvmAddress = L2_CROSS_DOMAIN_MESSENGER_ADDRESS
 ): CrossDomainMessage {
   const expectedAddress = normalizeEvmAddress(
     messengerAddress,

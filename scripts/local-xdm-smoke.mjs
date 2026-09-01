@@ -46,6 +46,7 @@ async function sendL2ContractCall(values) {
   const rpcUrl = required(values, "rpc-url");
   const expectedChainId = positiveInteger(required(values, "chain-id"), "chain-id");
   const applicationContract = address(required(values, "application-contract"));
+  const l1MessengerAddress = address(required(values, "l1-messenger-address"));
   const targetContractId = bytes32(required(values, "target-contract-id"));
   const payload = byteHex(required(values, "payload"));
   const privateKey = bytes32(required(values, "private-key"));
@@ -68,6 +69,7 @@ async function sendL2ContractCall(values) {
     targetContractId,
     payload,
     minGasLimit,
+    l1MessengerAddress,
     wait: true,
     sendTransaction: async (transaction) => {
       const decoded = decodeFunctionData({
