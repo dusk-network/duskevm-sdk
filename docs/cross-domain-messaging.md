@@ -17,12 +17,16 @@ import {
   findWithdrawalProof,
   submitDuskContractCall,
 } from "@dusk/evm-sdk/xdm";
+import { duskContractIdToEvmAddress } from "@dusk/evm-sdk";
 
 const submitted = await submitDuskContractCall({
   publicClient: l2PublicClient,
   sendTransaction: (transaction) =>
     l2WalletClient.sendTransaction({ account, ...transaction }),
   expectedChainId: deployment.l2ChainId,
+  l1MessengerAddress: duskContractIdToEvmAddress(
+    deployment.l1CrossDomainMessengerContractId
+  ),
   targetContractId: deployment.receiverContractId,
   payload: applicationPayload,
   wait: true,
