@@ -80,8 +80,16 @@ deposit receipt.
 
 The EVM receiver must authenticate `L2CrossDomainMessenger` as `msg.sender` and
 authorize the original Dusk identity returned by `xDomainMessageSender()`.
-Parse the L1 `SentMessage` receipt with `parseSentMessageReceipt` when an exact
-L2 replay is needed, and build it with `buildDuskEvmMessageReplayTransaction`.
+Parse the L1 `SentMessage` receipt with its native Messenger's canonical EVM
+address when an exact L2 replay is needed, then build the replay transaction:
+
+```ts
+const l1MessengerAddress = duskContractIdToEvmAddress(
+  deployment.l1CrossDomainMessengerContractId
+);
+const message = parseSentMessageReceipt(l1Receipt, l1MessengerAddress);
+const replay = buildDuskEvmMessageReplayTransaction(message);
+```
 
 ## Trust Boundary
 

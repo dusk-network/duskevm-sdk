@@ -14,11 +14,10 @@ console.log(decoded.target);
 ```ts
 import { prepareDuskContractCall } from "@dusk/evm-sdk";
 
-const payload = await targetContract.encode("dusk_xdm_execute", applicationMessage);
 const contractCall = prepareDuskContractCall({
   targetContractId:
     "0x1212121212121212121212121212121212121212121212121212121212121212",
-  payload,
+  payload: applicationMessage,
   minGasLimit: 150_000,
 });
 
@@ -29,9 +28,10 @@ await walletClient.sendTransaction({
 });
 ```
 
-`payload` is the target data driver's normal Piecrust encoding for the fixed
-`dusk_xdm_execute(Vec<u8>)` receiver. This operation cannot carry value. Use
-the bridge withdrawal helpers for DUSK, DRC20, or DRC721 transfers.
+`payload` is the application's raw byte payload. The native Messenger applies
+the Piecrust `Vec<u8>` argument encoding when it invokes the fixed
+`dusk_xdm_execute(Vec<u8>)` receiver. This operation cannot carry value. Use the
+bridge withdrawal helpers for DUSK, DRC20, or DRC721 transfers.
 
 ## Submit a Dusk-to-L2 Contract Call
 

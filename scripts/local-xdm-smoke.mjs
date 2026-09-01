@@ -3,6 +3,7 @@
 import {
   createPublicClient,
   createWalletClient,
+  decodeFunctionData,
   defineChain,
   http,
   parseAbi,
@@ -11,10 +12,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import {
   DUSK_CONTRACT_CALL_TARGET,
   buildWithdrawalOutputProof,
-  hashDuskCrossDomainMessage,
-  parseCrossDomainMessageFromWithdrawal,
-  parseMessagePassedReceipt,
-  prepareDuskContractCall,
+  l2CrossDomainMessengerAbi,
+  submitDuskContractCall,
   validateDuskEvmDeployment,
   waitForDuskEvmContractCallStatus,
 } from "../dist/index.js";
@@ -63,26 +62,45 @@ async function sendL2ContractCall(values) {
   const walletClient = createWalletClient({ account, chain, transport });
 
   await validateDuskEvmDeployment({ client: publicClient, expectedChainId });
-  const prepared = prepareDuskContractCall({ targetContractId, payload, minGasLimit });
-  const transactionHash = await walletClient.writeContract({
-    address: applicationContract,
-    abi: parseAbi(["function sendDuskCall(bytes envelope, uint32 minGasLimit)"]),
-    functionName: "sendDuskCall",
-    args: [prepared.envelopeHex, prepared.minGasLimit],
-    gas: 500_000n,
+  const submitted = await submitDuskContractCall({
+    publicClient,
+    expectedChainId,
+    targetContractId,
+    payload,
+    minGasLimit,
+    wait: true,
+    sendTransaction: async (transaction) => {
+      const decoded = decodeFunctionData({
+        abi: l2CrossDomainMessengerAbi,
+        data: transaction.data,
+      });
+      if (decoded.functionName !== "sendMessage") {
+        throw new Error("SDK did not prepare a Messenger sendMessage call");
+      }
+      const [target, envelope, gasLimit] = decoded.args;
+      if (target.toLowerCase() !== DUSK_CONTRACT_CALL_TARGET.toLowerCase()) {
+        throw new Error("SDK did not target the fixed Dusk contract-call discriminator");
+      }
+      return walletClient.writeContract({
+        address: applicationContract,
+        abi: parseAbi(["function sendDuskCall(bytes envelope, uint32 minGasLimit)"]),
+        functionName: "sendDuskCall",
+        args: [envelope, gasLimit],
+        gas: 500_000n,
+      });
+    },
   });
-  const receipt = await publicClient.waitForTransactionReceipt({ hash: transactionHash });
-  if (receipt.status !== "success") throw new Error("L2 application transaction reverted");
-
-  const withdrawal = parseMessagePassedReceipt(receipt);
-  const message = parseCrossDomainMessageFromWithdrawal(withdrawal.withdrawal);
+  const { transactionHash, receipt, withdrawal, crossDomainMessage: message } = submitted;
+  if (!receipt || !withdrawal || !message || !submitted.messageHash) {
+    throw new Error("SDK did not return confirmed cross-domain identities");
+  }
   if (message.sender.toLowerCase() !== applicationContract.toLowerCase()) {
     throw new Error("Cross-domain sender is not the application contract");
   }
   if (message.target.toLowerCase() !== DUSK_CONTRACT_CALL_TARGET.toLowerCase()) {
     throw new Error("Cross-domain target is not the fixed Dusk contract-call discriminator");
   }
-  if (message.message.toLowerCase() !== prepared.envelopeHex.toLowerCase()) {
+  if (message.message.toLowerCase() !== submitted.prepared.envelopeHex.toLowerCase()) {
     throw new Error("Cross-domain payload differs from the SDK envelope");
   }
 
@@ -90,8 +108,8 @@ async function sendL2ContractCall(values) {
     transactionHash,
     blockNumber: receipt.blockNumber,
     withdrawalHash: withdrawal.withdrawalHash,
-    messageHash: hashDuskCrossDomainMessage(message),
-    envelope: prepared.envelopeHex,
+    messageHash: submitted.messageHash,
+    envelope: submitted.prepared.envelopeHex,
   });
 }
 
@@ -100,6 +118,7 @@ async function trackDuskToL2(values) {
   const l2RpcUrl = required(values, "l2-rpc-url");
   const duskTransactionHash = bytes32(required(values, "dusk-transaction-hash"));
   const expectedChainId = positiveInteger(required(values, "chain-id"), "chain-id");
+  const timeoutMs = positiveInteger(values.get("timeout-ms") ?? "180000", "timeout-ms");
   const chain = defineChain({
     id: expectedChainId,
     name: "Local DuskEVM",
@@ -114,7 +133,7 @@ async function trackDuskToL2(values) {
     duskTransactionHash,
     expectedChainId,
     intervalMs: 1_000,
-    timeoutMs: 180_000,
+    timeoutMs,
   });
   if (status.phase !== "finalized" || status.metadata?.stage !== "completed") {
     throw new Error(`Dusk-to-DuskEVM delivery did not complete: ${JSON.stringify(status)}`);

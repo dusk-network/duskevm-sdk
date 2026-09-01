@@ -174,17 +174,17 @@ bridge APIs.
 ## Calls From DuskEVM To Dusk
 
 An L2 application can target a Dusk contract by its complete 32-byte
-`ContractId`. Encode the argument to the receiver's fixed
-`dusk_xdm_execute(payload)` entrypoint, then pass those bytes to the SDK:
+`ContractId`. Pass the raw application payload to the SDK; the native Messenger
+adds the RKYV `Vec<u8>` framing when it invokes the receiver's fixed
+`dusk_xdm_execute(payload)` entrypoint:
 
 ```ts
 import { prepareDuskContractCall } from "@dusk/evm-sdk";
 
-const payload = await targetContract.encode("dusk_xdm_execute", applicationMessage);
 const call = prepareDuskContractCall({
   targetContractId:
     "0x1212121212121212121212121212121212121212121212121212121212121212",
-  payload,
+  payload: applicationMessage,
   minGasLimit: 150_000,
 });
 
