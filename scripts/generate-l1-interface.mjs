@@ -68,15 +68,6 @@ const requiredContracts = {
   disputeGameFactory: {
     artifactName: "dispute_game_factory",
     methods: {
-      findLatestGames: signature(
-        [
-          ["game_type", "GameType"],
-          ["start", "U256"],
-          ["n", "U256"],
-        ],
-        "Vec < GameSearchResult >",
-        "read"
-      ),
       gameAtIndex: signature(
         [["index", "U256"]],
         "(GameType , Timestamp , EVMAddress)",
@@ -98,11 +89,6 @@ const requiredContracts = {
   faultDisputeGameHub: {
     artifactName: "fault_dispute_game_hub",
     methods: {
-      createdAtForGame: signature(
-        [["game", "EVMAddress"]],
-        "u64",
-        "read"
-      ),
       statusForGame: signature(
         [["game", "EVMAddress"]],
         "GameStatus",
@@ -215,7 +201,6 @@ const requiredContracts = {
         "(EVMAddress , u64)",
         "read"
       ),
-      respectedGameType: signature([], "GameType", "read"),
     },
   },
 };

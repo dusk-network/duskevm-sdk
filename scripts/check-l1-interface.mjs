@@ -26,7 +26,6 @@ const requiredMethods = [
   "gameContractId",
   "isGameProper",
   "isGameRespected",
-  "createdAtForGame",
   "statusForGame",
 ];
 const forbiddenFragments = [

@@ -4,8 +4,8 @@
 /** Source revision and digest for the imported public Dusk L1 interface. */
 export const duskL1ContractInterfaceSource = {
   "schemaVersion": 1,
-  "revision": "074045d2e1d06e854be66c77d894b00ad197121c",
-  "interfaceDigestSha256": "14dd950541e9000549f4f995d9bb18535c3d800ea2800a0672d6d7314a012230"
+  "revision": "39301d186b62d142c25f3b780b45531beb79916d",
+  "interfaceDigestSha256": "d2abe93a341d6c1fd6b2721fc8b5842ea705274164ba6c9e387e21e816c20f4c"
 } as const;
 
 /** Public wire-format constants owned by the L1 contracts. */
@@ -135,25 +135,6 @@ export const duskL1ContractMethods = {
     }
   },
   "disputeGameFactory": {
-    "findLatestGames": {
-      "name": "findLatestGames",
-      "stateMutability": "read",
-      "inputs": [
-        {
-          "name": "game_type",
-          "rustType": "GameType"
-        },
-        {
-          "name": "start",
-          "rustType": "U256"
-        },
-        {
-          "name": "n",
-          "rustType": "U256"
-        }
-      ],
-      "output": "Vec < GameSearchResult >"
-    },
     "gameAtIndex": {
       "name": "gameAtIndex",
       "stateMutability": "read",
@@ -195,17 +176,6 @@ export const duskL1ContractMethods = {
     }
   },
   "faultDisputeGameHub": {
-    "createdAtForGame": {
-      "name": "createdAtForGame",
-      "stateMutability": "read",
-      "inputs": [
-        {
-          "name": "game",
-          "rustType": "EVMAddress"
-        }
-      ],
-      "output": "u64"
-    },
     "statusForGame": {
       "name": "statusForGame",
       "stateMutability": "read",
@@ -458,12 +428,6 @@ export const duskL1ContractMethods = {
         }
       ],
       "output": "(EVMAddress , u64)"
-    },
-    "respectedGameType": {
-      "name": "respectedGameType",
-      "stateMutability": "read",
-      "inputs": [],
-      "output": "GameType"
     }
   }
 } as const;
