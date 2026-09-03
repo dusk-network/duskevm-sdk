@@ -16,6 +16,21 @@ if (!sourceArgument) {
 
 const sourcePath = path.resolve(process.cwd(), sourceArgument);
 const requiredContracts = {
+  anchorStateRegistry: {
+    artifactName: "anchor_state_registry",
+    methods: {
+      isGameProper: signature(
+        [["game", "EVMAddress"]],
+        "bool",
+        "read"
+      ),
+      isGameRespected: signature(
+        [["game", "EVMAddress"]],
+        "bool",
+        "read"
+      ),
+    },
+  },
   l1CrossDomainMessenger: {
     artifactName: "l1_cross_domain_messenger",
     methods: {
@@ -53,6 +68,7 @@ const requiredContracts = {
   disputeGameFactory: {
     artifactName: "dispute_game_factory",
     methods: {
+      anchorStateRegistryContractId: signature([], "Bytes32", "read"),
       findLatestGames: signature(
         [
           ["game_type", "GameType"],
@@ -68,9 +84,29 @@ const requiredContracts = {
         "read"
       ),
       gameCount: signature([], "U256", "read"),
+      gameContractId: signature(
+        [["game", "EVMAddress"]],
+        "Bytes32",
+        "read"
+      ),
       gameMetadataAtIndex: signature(
         [["index", "U256"]],
         "(Claim , Hash , U256 , Vec < u8 >)",
+        "read"
+      ),
+    },
+  },
+  faultDisputeGameHub: {
+    artifactName: "fault_dispute_game_hub",
+    methods: {
+      createdAtForGame: signature(
+        [["game", "EVMAddress"]],
+        "u64",
+        "read"
+      ),
+      statusForGame: signature(
+        [["game", "EVMAddress"]],
+        "GameStatus",
         "read"
       ),
     },

@@ -242,7 +242,7 @@ helpers reject invalid values before a claim is presented to the application.
 
 Withdrawals are OP-style multi-stage operations. The SDK prepares the L2 call,
 parses the `MessagePassed` receipt, builds a hash-bound output/MPT proof from
-the L2 client, selects a matching respected dispute game through a caller-
+the L2 client, selects a matching Portal-admissible dispute game through a caller-
 supplied Dusk contract reader, and builds Dusk L1 prove/finalize requests.
 
 ```ts

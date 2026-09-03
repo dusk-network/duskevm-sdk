@@ -22,6 +22,12 @@ const requiredMethods = [
   "finalizeWithdrawalTransactionExternalProof",
   "checkWithdrawal",
   "profileFinalizeWithdrawalTransaction",
+  "anchorStateRegistryContractId",
+  "gameContractId",
+  "isGameProper",
+  "isGameRespected",
+  "createdAtForGame",
+  "statusForGame",
 ];
 const forbiddenFragments = [
   "companionArtifacts",

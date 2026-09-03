@@ -259,6 +259,9 @@ describe("withdrawal proof discovery", () => {
           l2BlockNumber: 12n,
         };
       },
+      async isGameEligible() {
+        return true;
+      },
     };
     await expect(
       findWithdrawalProof({
@@ -275,6 +278,50 @@ describe("withdrawal proof discovery", () => {
     });
   });
 
+  it("skips a root-matching game that the Portal will not admit", async () => {
+    const withdrawalHash = `0x${"98".repeat(32)}` as Hex;
+    const output = await buildWithdrawalOutputProof({
+      client: l2Client,
+      withdrawalHash,
+      blockNumber: 12n,
+    });
+    const olderGame = "0x7777777777777777777777777777777777777777" as const;
+    const checked: bigint[] = [];
+    const gameReader: WithdrawalGameReader = {
+      async respectedGameType() {
+        return 8;
+      },
+      async gameCount() {
+        return 2n;
+      },
+      async latestGames() {
+        return [{ index: 1n }, { index: 0n }];
+      },
+      async game(index) {
+        return {
+          index,
+          gameProxy: index === 1n ? GAME_PROXY : olderGame,
+          rootClaim: output.outputRoot,
+          l2BlockNumber: 12n,
+        };
+      },
+      async isGameEligible(game) {
+        checked.push(game.index);
+        return game.index === 0n;
+      },
+    };
+
+    await expect(
+      findWithdrawalProof({
+        l2Client,
+        gameReader,
+        withdrawalHash,
+        withdrawalBlockNumber: 10n,
+      })
+    ).resolves.toMatchObject({ disputeGameIndex: 0n, disputeGameProxy: olderGame });
+    expect(checked).toEqual([1n, 0n]);
+  });
+
   it("appends only the inline child selected by the trie key", () => {
     const wrongLeaf = ["0x32", "0xbb"] as readonly Hex[];
     const expectedLeaf = ["0x32", "0xaa"] as readonly Hex[];
@@ -287,14 +334,37 @@ describe("withdrawal proof discovery", () => {
     ]);
   });
 
+  it("appends every nested inline descendant selected by the trie key", () => {
+    const leaf = ["0x34", "0xaa"] as readonly Hex[];
+    const extension = ["0x0023", leaf] as readonly (Hex | readonly Hex[])[];
+    const branch: (Hex | readonly (Hex | readonly Hex[])[])[] = Array.from(
+      { length: 17 },
+      () => "0x" as Hex
+    );
+    branch[1] = extension;
+
+    expect(appendEmbeddedTerminalNode("0x1234", [toRlp(branch)])).toEqual([
+      toRlp(branch),
+      toRlp(extension),
+      toRlp(leaf),
+    ]);
+  });
+
   it("normalizes Dusk driver tuples without exposing them to callers", async () => {
     const calls: string[] = [];
+    const contractIds: string[] = [];
+    let proper = true;
+    let respected = true;
+    let status = 0;
+    let createdAt = 1;
     const reader = createWithdrawalGameReader({
       portalContractId: "portal",
       disputeGameFactoryContractId: "factory",
+      nowSeconds: () => 2n,
       reader: {
         async readContract(request) {
           calls.push(request.method);
+          contractIds.push(request.contractId);
           switch (request.method) {
             case "respectedGameType":
               return 8;
@@ -306,6 +376,18 @@ describe("withdrawal proof discovery", () => {
               return [hexBytes(BLOCK_HASH), hexBytes(BLOCK_HASH), toU256Bytes(12n), []];
             case "gameAtIndex":
               return [8, 1, hexBytes(GAME_PROXY)];
+            case "anchorStateRegistryContractId":
+              return hexBytes(`0x${"aa".repeat(32)}` as Hex);
+            case "gameContractId":
+              return hexBytes(`0x${"bb".repeat(32)}` as Hex);
+            case "isGameProper":
+              return proper;
+            case "isGameRespected":
+              return respected;
+            case "statusForGame":
+              return status;
+            case "createdAtForGame":
+              return createdAt;
             default:
               throw new Error(`unexpected ${request.method}`);
           }
@@ -315,12 +397,27 @@ describe("withdrawal proof discovery", () => {
     expect(await reader.respectedGameType()).toBe(8);
     expect(await reader.gameCount()).toBe(1n);
     expect(await reader.latestGames(8, 0n, 1n)).toEqual([{ index: 0n }]);
-    expect(await reader.game(0n)).toMatchObject({
+    const game = await reader.game(0n);
+    expect(game).toMatchObject({
       gameProxy: GAME_PROXY,
       rootClaim: BLOCK_HASH,
       l2BlockNumber: 12n,
     });
+    expect(await reader.isGameEligible(game)).toBe(true);
+    respected = false;
+    expect(await reader.isGameEligible(game)).toBe(false);
+    respected = true;
+    proper = false;
+    expect(await reader.isGameEligible(game)).toBe(false);
+    proper = true;
+    status = 1;
+    expect(await reader.isGameEligible(game)).toBe(false);
+    status = 0;
+    createdAt = 2;
+    expect(await reader.isGameEligible(game)).toBe(false);
     expect(calls).toContain("gameMetadataAtIndex");
+    expect(contractIds).toContain("aa".repeat(32));
+    expect(contractIds).toContain("bb".repeat(32));
   });
 });
 
@@ -539,6 +636,23 @@ describe("submission and lifecycle", () => {
         now: () => 13,
       })
     ).toMatchObject({ phase: "accepted", metadata: { stage: "finalized" } });
+    expect(
+      duskContractCallLifecycleStatus({
+        finalizeReceipt: { transactionHash: TX_HASH, success: false },
+        portalFinalized: true,
+        delivery: { state: "delivery_failed", messageHash, replayable: true },
+        now: () => 14,
+      })
+    ).toMatchObject({ phase: "accepted", metadata: { stage: "delivery_failed" } });
+    expect(
+      duskContractCallLifecycleStatus({
+        finalizeReceipt: { transactionHash: TX_HASH, success: false },
+        portalFinalized: true,
+        replayTransactionHash: TX_HASH,
+        delivery: { state: "delivery_failed", messageHash, replayable: true },
+        now: () => 15,
+      })
+    ).toMatchObject({ phase: "submitted", metadata: { stage: "replay_submitted" } });
   });
 
   it("tracks Portal proof maturity and authoritative finalizability", async () => {

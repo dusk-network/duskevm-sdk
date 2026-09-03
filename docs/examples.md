@@ -243,7 +243,7 @@ await l1.submitTransaction(finalizeRequest);
 
 The SDK validates the `MessagePassed` withdrawal hash against the decoded event
 payload. `findWithdrawalProof` fetches the L2 block and storage proof, scans
-respected dispute games through `createWithdrawalGameReader`, and returns only
+Portal-admissible dispute games through `createWithdrawalGameReader`, and returns only
 a proof whose computed output root matches the game's committed root claim.
 
 ## Track Withdrawal Status

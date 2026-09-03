@@ -99,6 +99,7 @@ const replay = buildDuskEvmMessageReplayTransaction(message);
 
 Proof discovery does not trust a standalone L2 RPC response. It computes the
 output root from the returned L2 header and message-passer storage proof, then
-accepts it only when it equals a root claim from the Portal's respected dispute
-game type. Rusk, the adapter, op-node, and the fault-proof contracts remain the
-canonical state and resolution authorities.
+accepts it only when it equals a root claim from a game that the Portal currently
+considers proper and respected, has not resolved for the challenger, and is old
+enough to prove against. Rusk, the adapter, op-node, and the fault-proof contracts
+remain the canonical state and resolution authorities.

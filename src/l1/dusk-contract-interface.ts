@@ -4,8 +4,8 @@
 /** Source revision and digest for the imported public Dusk L1 interface. */
 export const duskL1ContractInterfaceSource = {
   "schemaVersion": 1,
-  "revision": "1afe5abcd3274142bad3ed26315098be33f33e41",
-  "interfaceDigestSha256": "1a59100274bfbbc2d5272e5cfdbe8b00283dbf1d8a8e744a5f7ed39534139826"
+  "revision": "a84a0637d67d8376fc16881e3d6043a89542d0b9",
+  "interfaceDigestSha256": "6e2c7aadeadd4929f936626f98873611cfc3e43edd9972a31a4fdc92aca3d756"
 } as const;
 
 /** Public wire-format constants owned by the L1 contracts. */
@@ -36,6 +36,30 @@ export const duskL1WireFormats = {
 
 /** Allowlisted Dusk L1 method signatures used by this SDK. */
 export const duskL1ContractMethods = {
+  "anchorStateRegistry": {
+    "isGameProper": {
+      "name": "isGameProper",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "game",
+          "rustType": "EVMAddress"
+        }
+      ],
+      "output": "bool"
+    },
+    "isGameRespected": {
+      "name": "isGameRespected",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "game",
+          "rustType": "EVMAddress"
+        }
+      ],
+      "output": "bool"
+    }
+  },
   "l1CrossDomainMessenger": {
     "failedMessages": {
       "name": "failedMessages",
@@ -111,6 +135,12 @@ export const duskL1ContractMethods = {
     }
   },
   "disputeGameFactory": {
+    "anchorStateRegistryContractId": {
+      "name": "anchorStateRegistryContractId",
+      "stateMutability": "read",
+      "inputs": [],
+      "output": "Bytes32"
+    },
     "findLatestGames": {
       "name": "findLatestGames",
       "stateMutability": "read",
@@ -147,6 +177,17 @@ export const duskL1ContractMethods = {
       "inputs": [],
       "output": "U256"
     },
+    "gameContractId": {
+      "name": "gameContractId",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "game",
+          "rustType": "EVMAddress"
+        }
+      ],
+      "output": "Bytes32"
+    },
     "gameMetadataAtIndex": {
       "name": "gameMetadataAtIndex",
       "stateMutability": "read",
@@ -157,6 +198,30 @@ export const duskL1ContractMethods = {
         }
       ],
       "output": "(Claim , Hash , U256 , Vec < u8 >)"
+    }
+  },
+  "faultDisputeGameHub": {
+    "createdAtForGame": {
+      "name": "createdAtForGame",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "game",
+          "rustType": "EVMAddress"
+        }
+      ],
+      "output": "u64"
+    },
+    "statusForGame": {
+      "name": "statusForGame",
+      "stateMutability": "read",
+      "inputs": [
+        {
+          "name": "game",
+          "rustType": "EVMAddress"
+        }
+      ],
+      "output": "GameStatus"
     }
   },
   "l1StandardBridge": {

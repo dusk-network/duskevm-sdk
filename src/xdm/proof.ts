@@ -16,6 +16,7 @@ import type { OutputRootProof, WithdrawalProofData } from "../bridge/index.js";
 const ZERO_HASH = `0x${"00".repeat(32)}` as Hex;
 const DEFAULT_GAME_SEARCH_DEPTH = 64n;
 const GAME_PAGE_SIZE = 32n;
+const CHALLENGER_WINS = 1n;
 const portalMethods = duskL1ContractMethods.optimismPortal;
 const gameFactoryMethods = duskL1ContractMethods.disputeGameFactory;
 
@@ -43,12 +44,13 @@ export type WithdrawalGame = {
   l2BlockNumber: bigint;
 };
 
-/** Reader abstraction for canonical dispute-game candidates. */
+/** Reader abstraction for dispute-game candidates and Portal proof admission. */
 export type WithdrawalGameReader = {
   respectedGameType(): Promise<number>;
   gameCount(): Promise<bigint>;
   latestGames(gameType: number, start: bigint, count: bigint): Promise<readonly { index: bigint }[]>;
   game(index: bigint): Promise<WithdrawalGame>;
+  isGameEligible(game: WithdrawalGame): Promise<boolean>;
 };
 
 /** Selected dispute game plus the proof accepted by OptimismPortal. */
@@ -63,10 +65,12 @@ export function createWithdrawalGameReader(params: {
   reader: DuskL1ContractReader;
   portalContractId: string;
   disputeGameFactoryContractId: string;
+  nowSeconds?: () => bigint;
 }): WithdrawalGameReader {
   requireContractId(params.portalContractId, "OptimismPortal");
   requireContractId(params.disputeGameFactoryContractId, "DisputeGameFactory");
   const read = params.reader.readContract.bind(params.reader);
+  const nowSeconds = params.nowSeconds ?? (() => BigInt(Math.floor(Date.now() / 1_000)));
 
   return {
     async respectedGameType() {
@@ -126,10 +130,63 @@ export function createWithdrawalGameReader(params: {
           : normalizeBigint(explicitL2Block, "game L2 block number"),
       };
     },
+    async isGameEligible(game) {
+      const [anchorStateRegistryId, gameContractId] = await Promise.all([
+        read({
+          contractId: params.disputeGameFactoryContractId,
+          method: gameFactoryMethods.anchorStateRegistryContractId.name,
+        }),
+        read({
+          contractId: params.disputeGameFactoryContractId,
+          method: gameFactoryMethods.gameContractId.name,
+          args: game.gameProxy,
+        }),
+      ]);
+      const anchorStateRegistryContractId = normalizeContractId(
+        anchorStateRegistryId,
+        "AnchorStateRegistry contract id"
+      );
+      const disputeGameContractId = normalizeContractId(
+        gameContractId,
+        "dispute game contract id"
+      );
+      if (!anchorStateRegistryContractId || !disputeGameContractId) return false;
+
+      const [proper, respected, status, createdAt] = await Promise.all([
+        read({
+          contractId: anchorStateRegistryContractId,
+          method: duskL1ContractMethods.anchorStateRegistry.isGameProper.name,
+          args: game.gameProxy,
+        }),
+        read({
+          contractId: anchorStateRegistryContractId,
+          method: duskL1ContractMethods.anchorStateRegistry.isGameRespected.name,
+          args: game.gameProxy,
+        }),
+        read({
+          contractId: disputeGameContractId,
+          method: duskL1ContractMethods.faultDisputeGameHub.statusForGame.name,
+          args: game.gameProxy,
+        }),
+        read({
+          contractId: disputeGameContractId,
+          method: duskL1ContractMethods.faultDisputeGameHub.createdAtForGame.name,
+          args: game.gameProxy,
+        }),
+      ]);
+      const createdAtSeconds = normalizeUnsignedBigint(createdAt, "game creation timestamp");
+      return (
+        normalizeBoolean(proper, "isGameProper") &&
+        normalizeBoolean(respected, "isGameRespected") &&
+        normalizeUnsignedBigint(status, "game status") !== CHALLENGER_WINS &&
+        createdAtSeconds !== 0n &&
+        nowSeconds() > createdAtSeconds
+      );
+    },
   };
 }
 
-/** Find the newest canonical dispute game whose output root covers a withdrawal. */
+/** Find the newest Portal-admissible dispute game whose output root covers a withdrawal. */
 export async function findWithdrawalProof(params: {
   l2Client: WithdrawalProofL2Client;
   gameReader: WithdrawalGameReader;
@@ -163,6 +220,7 @@ export async function findWithdrawalProof(params: {
       try {
         const game = await params.gameReader.game(candidate.index);
         if (game.l2BlockNumber < params.withdrawalBlockNumber) continue;
+        if (!(await params.gameReader.isGameEligible(game))) continue;
         const proof = await buildWithdrawalOutputProof({
           client: params.l2Client,
           withdrawalHash,
@@ -265,7 +323,7 @@ export function hashOutputRootProof(proof: OutputRootProof): Hex {
   );
 }
 
-/** Include an embedded terminal MPT child omitted by some eth_getProof clients. */
+/** Include embedded MPT descendants omitted by some eth_getProof clients. */
 export function appendEmbeddedTerminalNode(key: Hex, proof: readonly Hex[]): readonly Hex[] {
   const nibbles = Array.from(hexToBytes(key)).flatMap((byte) => [byte >> 4, byte & 0x0f]);
   let cursor = 0;
@@ -279,33 +337,48 @@ export function appendEmbeddedTerminalNode(key: Hex, proof: readonly Hex[]): rea
     }
     if (!Array.isArray(node)) return proof;
 
-    let child: unknown;
-    if (node.length === 17) {
-      if (cursor >= nibbles.length) return proof;
-      child = node[nibbles[cursor]!]!;
-      cursor += 1;
-    } else if (node.length === 2) {
-      const compactPath = compactPathNibbles(node[0]);
-      if (!compactPath) return proof;
-      const { leaf, nibbles: segment } = compactPath;
-      if (!segment.every((nibble, offset) => nibbles[cursor + offset] === nibble)) {
-        return proof;
-      }
-      cursor += segment.length;
-      if (leaf) return proof;
-      child = node[1];
-    } else {
-      return proof;
-    }
+    const selected = selectTrieChild(node, nibbles, cursor);
+    if (!selected) return proof;
+    cursor = selected.cursor;
+    if (selected.leaf) return proof;
 
     if (index === proof.length - 1) {
-      const embedded = embeddedNode(child);
-      if (embedded && hexToBytes(embedded.rlp).length < 32) {
-        return [...proof, embedded.rlp];
+      const normalized = [...proof];
+      let embedded = embeddedNode(selected.child);
+      while (embedded && hexToBytes(embedded.rlp).length < 32) {
+        normalized.push(embedded.rlp);
+        const next = selectTrieChild(embedded.node, nibbles, cursor);
+        if (!next || next.leaf) return normalized;
+        cursor = next.cursor;
+        embedded = embeddedNode(next.child);
       }
+      return normalized;
     }
   }
   return proof;
+}
+
+function selectTrieChild(
+  node: ReturnType<typeof fromRlp>,
+  nibbles: readonly number[],
+  cursor: number
+): { child?: unknown; cursor: number; leaf: boolean } | undefined {
+  if (!Array.isArray(node)) return undefined;
+  if (node.length === 17) {
+    if (cursor >= nibbles.length) return undefined;
+    return { child: node[nibbles[cursor]!]!, cursor: cursor + 1, leaf: false };
+  }
+  if (node.length !== 2) return undefined;
+  const compactPath = compactPathNibbles(node[0]);
+  if (!compactPath) return undefined;
+  if (!compactPath.nibbles.every((nibble, offset) => nibbles[cursor + offset] === nibble)) {
+    return undefined;
+  }
+  return {
+    child: compactPath.leaf ? undefined : node[1],
+    cursor: cursor + compactPath.nibbles.length,
+    leaf: compactPath.leaf,
+  };
 }
 
 function compactPathNibbles(value: unknown): { leaf: boolean; nibbles: number[] } | undefined {
@@ -353,6 +426,32 @@ function normalizeBigint(value: unknown, label: string): bigint {
   const bytes = normalizeBytes(value, label);
   if (bytes.length !== 32) throw sdkError("CLIENT_ERROR", `${label} must be a U256`, value);
   return bytesToBigint(bytes);
+}
+
+function normalizeUnsignedBigint(value: unknown, label: string): bigint {
+  if (typeof value === "bigint" && value >= 0n) return value;
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return BigInt(value);
+  if (typeof value === "string" && /^(?:0x[0-9a-fA-F]+|[0-9]+)$/u.test(value)) {
+    return BigInt(value);
+  }
+  const bytes = normalizeBytes(value, label);
+  if (bytes.length === 0 || bytes.length > 32) {
+    throw sdkError("CLIENT_ERROR", `${label} must be an unsigned integer`, value);
+  }
+  return bytesToBigint(bytes);
+}
+
+function normalizeBoolean(value: unknown, label: string): boolean {
+  if (typeof value === "boolean") return value;
+  const normalized = normalizeUnsignedBigint(value, label);
+  if (normalized === 0n) return false;
+  if (normalized === 1n) return true;
+  throw sdkError("CLIENT_ERROR", `${label} must be a boolean`, value);
+}
+
+function normalizeContractId(value: unknown, label: string): string | undefined {
+  const contractId = normalizeBytes32(value, label).slice(2);
+  return /^0+$/u.test(contractId) ? undefined : contractId;
 }
 
 function normalizePositiveBigint(value: bigint | number, label: string): bigint {

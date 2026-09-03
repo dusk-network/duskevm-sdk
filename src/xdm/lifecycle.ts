@@ -115,9 +115,6 @@ export function duskContractCallLifecycleStatus(
       "The withdrawal is finalized; Messenger delivery confirmation is pending"
     );
   }
-  if (input.failure || input.proveReceipt?.success === false || input.finalizeReceipt?.success === false) {
-    return makeStatus("failed", "failed", now(), metadata, errorMessage(input.failure));
-  }
   if (input.replayReceipt?.success === false) {
     return makeStatus(
       "accepted",
@@ -151,6 +148,9 @@ export function duskContractCallLifecycleStatus(
       },
       "The native receiver rejected the message; the exact message can be replayed"
     );
+  }
+  if (input.failure || input.proveReceipt?.success === false || input.finalizeReceipt?.success === false) {
+    return makeStatus("failed", "failed", now(), metadata, errorMessage(input.failure));
   }
   if (
     input.finalizeReceipt?.success === true && input.finalizeReceipt.finalized === true
