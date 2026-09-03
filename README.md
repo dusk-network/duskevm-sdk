@@ -66,7 +66,7 @@ npm run check
 npm run smoke:local:dry-run
 ```
 
-Supported targets are Node.js 22 and 24, Deno 2, and modern browsers using ESM.
+Supported targets are Node.js 22 or newer, Deno 2, and modern browsers using ESM.
 The packed npm artifact is tested through every export path and a Vite browser
 bundle. Bun and Cloudflare Workers remain unclaimed until they have dedicated
 compatibility coverage.
