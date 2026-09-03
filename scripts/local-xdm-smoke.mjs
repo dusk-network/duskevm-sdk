@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawn } from "node:child_process";
 import {
   createPublicClient,
   createWalletClient,
@@ -12,6 +13,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import {
   DUSK_CONTRACT_CALL_TARGET,
   buildWithdrawalOutputProof,
+  createWithdrawalGameReader,
+  findWithdrawalProof,
   l2CrossDomainMessengerAbi,
   prepareDuskEvmContractCall,
   submitDuskContractCall,
@@ -26,11 +29,13 @@ if (mode === "send-l2-contract") {
   await sendL2ContractCall(options);
 } else if (mode === "build-withdrawal-proof") {
   await buildLiveWithdrawalProof(options);
+} else if (mode === "select-withdrawal-proof") {
+  await selectLiveWithdrawalProof(options);
 } else if (mode === "track-dusk-to-l2") {
   await trackDuskToL2(options);
 } else {
   throw new Error(
-    "Usage: local-xdm-smoke.mjs <send-l2-contract|build-withdrawal-proof|track-dusk-to-l2> --key value ..."
+    "Usage: local-xdm-smoke.mjs <send-l2-contract|build-withdrawal-proof|select-withdrawal-proof|track-dusk-to-l2> --key value ..."
   );
 }
 
@@ -41,6 +46,63 @@ async function buildLiveWithdrawalProof(values) {
   const client = createPublicClient({ transport: http(rpcUrl) });
   const proof = await buildWithdrawalOutputProof({ client, withdrawalHash, blockNumber });
   printJson({ blockNumber, ...proof });
+}
+
+async function selectLiveWithdrawalProof(values) {
+  const l2RpcUrl = required(values, "l2-rpc-url");
+  const ruskUrl = required(values, "rusk-url");
+  const readDriver = required(values, "l1-read-driver");
+  const portalContractId = bytes32(required(values, "portal-contract-id")).slice(2);
+  const withdrawalHash = bytes32(required(values, "withdrawal-hash"));
+  const withdrawalBlockNumber = positiveBigint(
+    required(values, "withdrawal-block-number"),
+    "withdrawal-block-number"
+  );
+  const maxGames = positiveBigint(values.get("max-games") ?? "64", "max-games");
+  const l2Client = createPublicClient({ transport: http(l2RpcUrl) });
+  const reader = {
+    readContract(request) {
+      return runL1ReadDriver(readDriver, ruskUrl, request);
+    },
+  };
+  const proof = await findWithdrawalProof({
+    l2Client,
+    gameReader: createWithdrawalGameReader({ reader, portalContractId }),
+    withdrawalHash,
+    withdrawalBlockNumber,
+    maxGames,
+  });
+  printJson(proof);
+}
+
+function runL1ReadDriver(executable, ruskUrl, request) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, ["sdk-contract-read", "--rusk-url", ruskUrl], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const stdout = [];
+    const stderr = [];
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", reject);
+    child.on("close", (code) => {
+      const output = Buffer.concat(stdout).toString("utf8").trim();
+      if (code !== 0) {
+        reject(
+          new Error(
+            `Dusk contract read driver exited with ${code}: ${Buffer.concat(stderr).toString("utf8").trim()}`
+          )
+        );
+        return;
+      }
+      try {
+        resolve(JSON.parse(output));
+      } catch (error) {
+        reject(new Error(`Dusk contract read driver returned invalid JSON: ${output}`, { cause: error }));
+      }
+    });
+    child.stdin.end(JSON.stringify(request, bigintJson));
+  });
 }
 
 async function sendL2ContractCall(values) {
@@ -211,4 +273,8 @@ function printJson(value) {
   process.stdout.write(
     `${JSON.stringify(value, (_, item) => (typeof item === "bigint" ? item.toString() : item))}\n`
   );
+}
+
+function bigintJson(_key, value) {
+  return typeof value === "bigint" ? value.toString() : value;
 }
