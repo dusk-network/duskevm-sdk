@@ -359,7 +359,6 @@ describe("withdrawal proof discovery", () => {
     let createdAt = 1;
     const reader = createWithdrawalGameReader({
       portalContractId: "portal",
-      disputeGameFactoryContractId: "factory",
       nowSeconds: () => 2n,
       reader: {
         async readContract(request) {
@@ -378,6 +377,8 @@ describe("withdrawal proof discovery", () => {
               return [8, 1, hexBytes(GAME_PROXY)];
             case "anchorStateRegistryContractId":
               return hexBytes(`0x${"aa".repeat(32)}` as Hex);
+            case "disputeGameFactoryContractId":
+              return hexBytes(`0x${"cc".repeat(32)}` as Hex);
             case "gameContractId":
               return hexBytes(`0x${"bb".repeat(32)}` as Hex);
             case "isGameProper":
@@ -418,6 +419,7 @@ describe("withdrawal proof discovery", () => {
     expect(calls).toContain("gameMetadataAtIndex");
     expect(contractIds).toContain("aa".repeat(32));
     expect(contractIds).toContain("bb".repeat(32));
+    expect(contractIds).toContain("cc".repeat(32));
   });
 });
 

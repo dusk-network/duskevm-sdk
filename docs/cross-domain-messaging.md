@@ -38,7 +38,6 @@ const proof = await findWithdrawalProof({
   gameReader: createWithdrawalGameReader({
     reader: duskContractReader,
     portalContractId: deployment.optimismPortalContractId,
-    disputeGameFactoryContractId: deployment.disputeGameFactoryContractId,
   }),
   withdrawalHash: message.withdrawalHash,
   withdrawalBlockNumber: message.blockNumber!,

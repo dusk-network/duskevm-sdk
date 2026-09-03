@@ -68,7 +68,6 @@ const requiredContracts = {
   disputeGameFactory: {
     artifactName: "dispute_game_factory",
     methods: {
-      anchorStateRegistryContractId: signature([], "Bytes32", "read"),
       findLatestGames: signature(
         [
           ["game_type", "GameType"],
@@ -167,6 +166,7 @@ const requiredContracts = {
   optimismPortal: {
     artifactName: "optimism_portal",
     methods: {
+      anchorStateRegistryContractId: signature([], "Bytes32", "read"),
       proveWithdrawalTransaction: signature(
         [
           ["withdrawal", "WithdrawalTransaction"],
@@ -195,6 +195,7 @@ const requiredContracts = {
         "()",
         "read"
       ),
+      disputeGameFactoryContractId: signature([], "Bytes32", "read"),
       finalizedWithdrawals: signature(
         [["withdrawal_hash", "Bytes32"]],
         "bool",

@@ -4,8 +4,8 @@
 /** Source revision and digest for the imported public Dusk L1 interface. */
 export const duskL1ContractInterfaceSource = {
   "schemaVersion": 1,
-  "revision": "a84a0637d67d8376fc16881e3d6043a89542d0b9",
-  "interfaceDigestSha256": "6e2c7aadeadd4929f936626f98873611cfc3e43edd9972a31a4fdc92aca3d756"
+  "revision": "074045d2e1d06e854be66c77d894b00ad197121c",
+  "interfaceDigestSha256": "14dd950541e9000549f4f995d9bb18535c3d800ea2800a0672d6d7314a012230"
 } as const;
 
 /** Public wire-format constants owned by the L1 contracts. */
@@ -135,12 +135,6 @@ export const duskL1ContractMethods = {
     }
   },
   "disputeGameFactory": {
-    "anchorStateRegistryContractId": {
-      "name": "anchorStateRegistryContractId",
-      "stateMutability": "read",
-      "inputs": [],
-      "output": "Bytes32"
-    },
     "findLatestGames": {
       "name": "findLatestGames",
       "stateMutability": "read",
@@ -340,6 +334,12 @@ export const duskL1ContractMethods = {
     }
   },
   "optimismPortal": {
+    "anchorStateRegistryContractId": {
+      "name": "anchorStateRegistryContractId",
+      "stateMutability": "read",
+      "inputs": [],
+      "output": "Bytes32"
+    },
     "proveWithdrawalTransaction": {
       "name": "proveWithdrawalTransaction",
       "stateMutability": "write",
@@ -403,6 +403,12 @@ export const duskL1ContractMethods = {
         }
       ],
       "output": "()"
+    },
+    "disputeGameFactoryContractId": {
+      "name": "disputeGameFactoryContractId",
+      "stateMutability": "read",
+      "inputs": [],
+      "output": "Bytes32"
     },
     "finalizedWithdrawals": {
       "name": "finalizedWithdrawals",

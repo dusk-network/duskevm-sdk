@@ -64,13 +64,36 @@ export type SelectedWithdrawalProof = WithdrawalProofData & {
 export function createWithdrawalGameReader(params: {
   reader: DuskL1ContractReader;
   portalContractId: string;
-  disputeGameFactoryContractId: string;
   nowSeconds?: () => bigint;
 }): WithdrawalGameReader {
   requireContractId(params.portalContractId, "OptimismPortal");
-  requireContractId(params.disputeGameFactoryContractId, "DisputeGameFactory");
   const read = params.reader.readContract.bind(params.reader);
   const nowSeconds = params.nowSeconds ?? (() => BigInt(Math.floor(Date.now() / 1_000)));
+  let canonicalContractIds:
+    | Promise<{ anchorStateRegistryContractId: string; disputeGameFactoryContractId: string }>
+    | undefined;
+  const resolveCanonicalContractIds = () => {
+    canonicalContractIds ??= Promise.all([
+      read({
+        contractId: params.portalContractId,
+        method: portalMethods.anchorStateRegistryContractId.name,
+      }),
+      read({
+        contractId: params.portalContractId,
+        method: portalMethods.disputeGameFactoryContractId.name,
+      }),
+    ]).then(([anchorStateRegistryId, disputeGameFactoryId]) => ({
+      anchorStateRegistryContractId: requireResolvedContractId(
+        anchorStateRegistryId,
+        "AnchorStateRegistry contract id"
+      ),
+      disputeGameFactoryContractId: requireResolvedContractId(
+        disputeGameFactoryId,
+        "DisputeGameFactory contract id"
+      ),
+    }));
+    return canonicalContractIds;
+  };
 
   return {
     async respectedGameType() {
@@ -85,17 +108,19 @@ export function createWithdrawalGameReader(params: {
       );
     },
     async gameCount() {
+      const { disputeGameFactoryContractId } = await resolveCanonicalContractIds();
       return normalizeBigint(
         await read({
-          contractId: params.disputeGameFactoryContractId,
+          contractId: disputeGameFactoryContractId,
           method: gameFactoryMethods.gameCount.name,
         }),
         "game count"
       );
     },
     async latestGames(gameType, start, count) {
+      const { disputeGameFactoryContractId } = await resolveCanonicalContractIds();
       const raw = await read({
-        contractId: params.disputeGameFactoryContractId,
+        contractId: disputeGameFactoryContractId,
         method: gameFactoryMethods.findLatestGames.name,
         args: [gameType, bigintToU256(start), bigintToU256(count)],
       });
@@ -107,14 +132,15 @@ export function createWithdrawalGameReader(params: {
       }));
     },
     async game(index) {
+      const { disputeGameFactoryContractId } = await resolveCanonicalContractIds();
       const [metadata, gameAtIndex] = await Promise.all([
         read({
-          contractId: params.disputeGameFactoryContractId,
+          contractId: disputeGameFactoryContractId,
           method: gameFactoryMethods.gameMetadataAtIndex.name,
           args: bigintToU256(index),
         }),
         read({
-          contractId: params.disputeGameFactoryContractId,
+          contractId: disputeGameFactoryContractId,
           method: gameFactoryMethods.gameAtIndex.name,
           args: bigintToU256(index),
         }),
@@ -131,26 +157,18 @@ export function createWithdrawalGameReader(params: {
       };
     },
     async isGameEligible(game) {
-      const [anchorStateRegistryId, gameContractId] = await Promise.all([
-        read({
-          contractId: params.disputeGameFactoryContractId,
-          method: gameFactoryMethods.anchorStateRegistryContractId.name,
-        }),
-        read({
-          contractId: params.disputeGameFactoryContractId,
-          method: gameFactoryMethods.gameContractId.name,
-          args: game.gameProxy,
-        }),
-      ]);
-      const anchorStateRegistryContractId = normalizeContractId(
-        anchorStateRegistryId,
-        "AnchorStateRegistry contract id"
-      );
-      const disputeGameContractId = normalizeContractId(
+      const { anchorStateRegistryContractId, disputeGameFactoryContractId } =
+        await resolveCanonicalContractIds();
+      const gameContractId = await read({
+        contractId: disputeGameFactoryContractId,
+        method: gameFactoryMethods.gameContractId.name,
+        args: game.gameProxy,
+      });
+      const resolvedGameContractId = normalizeContractId(
         gameContractId,
         "dispute game contract id"
       );
-      if (!anchorStateRegistryContractId || !disputeGameContractId) return false;
+      if (!resolvedGameContractId) return false;
 
       const [proper, respected, status, createdAt] = await Promise.all([
         read({
@@ -164,12 +182,12 @@ export function createWithdrawalGameReader(params: {
           args: game.gameProxy,
         }),
         read({
-          contractId: disputeGameContractId,
+          contractId: resolvedGameContractId,
           method: duskL1ContractMethods.faultDisputeGameHub.statusForGame.name,
           args: game.gameProxy,
         }),
         read({
-          contractId: disputeGameContractId,
+          contractId: resolvedGameContractId,
           method: duskL1ContractMethods.faultDisputeGameHub.createdAtForGame.name,
           args: game.gameProxy,
         }),
@@ -452,6 +470,12 @@ function normalizeBoolean(value: unknown, label: string): boolean {
 function normalizeContractId(value: unknown, label: string): string | undefined {
   const contractId = normalizeBytes32(value, label).slice(2);
   return /^0+$/u.test(contractId) ? undefined : contractId;
+}
+
+function requireResolvedContractId(value: unknown, label: string): string {
+  const contractId = normalizeContractId(value, label);
+  if (!contractId) throw sdkError("UNAVAILABLE", `${label} is not configured`);
+  return contractId;
 }
 
 function normalizePositiveBigint(value: bigint | number, label: string): bigint {
