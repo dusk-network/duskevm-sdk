@@ -74,6 +74,7 @@ compatibility coverage.
 ## Quickstart
 
 ```ts
+import { createDuskApp } from "@dusk/connect";
 import {
   createBridgeClient,
   createDuskConnectL1Client,
@@ -81,7 +82,23 @@ import {
   parseDuskToLux,
 } from "@dusk/evm-sdk";
 
-const l1 = createDuskConnectL1Client(duskWallet);
+const duskApp = createDuskApp({
+  wallet: duskWallet,
+  contracts: deployment.duskContracts,
+});
+const resolveDuskContract = (contractId: string) => {
+  const normalized = contractId.replace(/^0x/u, "").toLowerCase();
+  const contract = Object.values(duskApp.contracts).find(
+    (candidate) =>
+      candidate.contractId.replace(/^0x/u, "").toLowerCase() === normalized
+  );
+  if (!contract) throw new Error(`Unknown Dusk contract ${contractId}`);
+  return contract;
+};
+const l1 = createDuskConnectL1Client(duskApp, {
+  privacy: "public",
+  resolveContract: (contractId) => resolveDuskContract(contractId),
+});
 
 const bridge = createBridgeClient({
   l1,
@@ -100,6 +117,12 @@ const submitted = await bridge.submitNativeDeposit({
 
 console.log(duskEvmTestnet.id, submitted.submittedTransaction.transactionHash);
 ```
+
+`deployment.duskContracts` is the trusted deployment manifest's complete map
+of Dusk system-contract presets, including each contract's data-driver URL.
+The app performs RKYV input encoding, decoded contract reads, and transaction
+tracking. When adapting the low-level Dusk wallet instead, provide explicit
+`encodeContractCall`, `readContract`, and `waitForTransaction` options.
 
 Applications can resume a submitted deposit from its Dusk transaction hash.
 The observer distinguishes a missing receipt from a proven failure and derives
@@ -140,7 +163,10 @@ import {
   waitForDuskEvmContractCallStatus,
 } from "@dusk/evm-sdk";
 
-const l1 = createDuskConnectL1Client(duskWallet);
+const l1 = createDuskConnectL1Client(duskApp, {
+  privacy: "public",
+  resolveContract: (contractId) => resolveDuskContract(contractId),
+});
 const message = await submitDuskEvmContractCall(
   l1,
   {

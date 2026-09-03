@@ -57,18 +57,26 @@ describe("Dusk-to-DuskEVM contract calls", () => {
 
   it("submits through Dusk Connect and optionally waits", async () => {
     const walletRequests: unknown[] = [];
-    const client = createDuskConnectL1Client({
-      async sendTransaction(request) {
-        walletRequests.push(request);
-        return { transactionHash: "dusk-message-tx" };
+    const client = createDuskConnectL1Client(
+      {
+        async sendTransaction(request) {
+          walletRequests.push(request);
+          return { hash: "dusk-message-tx" };
+        },
+        async getGasPrice() {
+          return { average: "3", max: "4", median: "2", min: "1" };
+        },
       },
-      async getGasPrice() {
-        return 3;
-      },
-      async waitForTxExecuted(transactionHash) {
-        return { transactionHash, finalized: true, success: true };
-      },
-    });
+      {
+        privacy: "public",
+        encodeContractCall: async () => new Uint8Array([0x01, 0x02]),
+        waitForTransaction: async (transactionHash) => ({
+          hash: transactionHash,
+          status: "executed",
+          ok: true,
+        }),
+      }
+    );
 
     const submitted = await submitDuskEvmContractCall(
       client,
@@ -86,11 +94,11 @@ describe("Dusk-to-DuskEVM contract calls", () => {
     expect(walletRequests).toEqual([
       {
         kind: "contract_call",
-        contract: MESSENGER_ID,
-        fn: "sendMessage",
-        args: [TARGET, "0x1234", 250_000],
-        gasPrice: "3",
-        metadata: {
+        privacy: "public",
+        contractId: MESSENGER_ID,
+        fnName: "sendMessage",
+        fnArgs: new Uint8Array([0x01, 0x02]),
+        display: {
           xdmDirection: "dusk-to-duskevm",
           target: TARGET,
           minGasLimit: 250_000,

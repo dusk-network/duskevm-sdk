@@ -20,6 +20,9 @@ Notable changes to `@dusk/evm-sdk` are documented here.
   parsing, authoritative L1 state reads, lifecycle status, and claim submission.
 - Preserve DRC20 amounts as raw atomic units and require L2 representations to
   use the corresponding DRC20 display decimals.
+- Align the Dusk Connect adapter with the current wallet and DuskApp APIs,
+  including data-driver encoding, explicit privacy, nested gas, decoded reads,
+  average gas-price selection, and transaction-handle tracking.
 
 ## 0.1.0-beta.3
 

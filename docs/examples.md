@@ -1,5 +1,34 @@
 # Examples
 
+## Dusk Connect Browser Setup
+
+```ts
+import { createDuskApp } from "@dusk/connect";
+import { createDuskConnectL1Client } from "@dusk/evm-sdk";
+
+const duskApp = createDuskApp({
+  wallet: duskWallet,
+  contracts: deployment.duskContracts,
+});
+const resolveDuskContract = (contractId: string) => {
+  const normalized = contractId.replace(/^0x/u, "").toLowerCase();
+  const contract = Object.values(duskApp.contracts).find(
+    (candidate) =>
+      candidate.contractId.replace(/^0x/u, "").toLowerCase() === normalized
+  );
+  if (!contract) throw new Error(`Unknown Dusk contract ${contractId}`);
+  return contract;
+};
+const l1 = createDuskConnectL1Client(duskApp, {
+  privacy: "public",
+  resolveContract: resolveDuskContract,
+});
+```
+
+The trusted deployment manifest must include presets and data-driver URLs for
+every contract used by the operation. The resulting adapter uses DuskApp for
+RKYV encoding, decoded reads, and transaction-handle tracking.
+
 ## Decode an SDK Deposit Envelope
 
 ```ts
@@ -36,12 +65,8 @@ bridge withdrawal helpers for DUSK, DRC20, or DRC721 transfers.
 ## Submit a Dusk-to-L2 Contract Call
 
 ```ts
-import {
-  createDuskConnectL1Client,
-  submitDuskEvmContractCall,
-} from "@dusk/evm-sdk";
+import { submitDuskEvmContractCall } from "@dusk/evm-sdk";
 
-const l1 = createDuskConnectL1Client(duskWallet);
 const message = await submitDuskEvmContractCall(
   l1,
   {
@@ -89,16 +114,14 @@ const drc20Deposit = bridge.prepareDrc20Deposit({
 });
 ```
 
-## Submit Through a Dusk Connect-compatible Wallet
+## Submit Through Dusk Connect
 
 ```ts
 import {
   createBridgeClient,
-  createDuskConnectL1Client,
   parseDuskToLux,
 } from "@dusk/evm-sdk";
 
-const l1 = createDuskConnectL1Client(duskWallet);
 const bridge = createBridgeClient({
   l1,
   contracts: {
@@ -114,6 +137,8 @@ const deposit = bridge.prepareNativeDeposit({
 const submitted = await bridge.submitPreparedOperation(deposit);
 console.log(submitted.transactionHash);
 ```
+
+The shared browser setup above supplies `l1`.
 
 ## Wait for a Dusk L1 Transaction
 
