@@ -44,9 +44,9 @@ const proof = await findWithdrawalProof({
 });
 ```
 
-The recommended browser reader is the `readContract` method supplied by a
-data-driver-backed `DuskApp`. A custom reader must return decoded values in
-the following public-interface shapes:
+The browser integration must supply a decoded `readContract` adapter for the
+active deployment. It must return values in the following public-interface
+shapes:
 
 - Portal contract IDs and `gameContractId`: 32-byte hex or byte arrays.
 - `gameCount` and L2 sequence numbers: unsigned integers or 32-byte U256 values.

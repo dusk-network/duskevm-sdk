@@ -3,31 +3,21 @@
 ## Dusk Connect Browser Setup
 
 ```ts
-import { createDuskApp } from "@dusk/connect";
 import { createDuskConnectL1Client } from "@dusk/evm-sdk";
 
-const duskApp = createDuskApp({
-  wallet: duskWallet,
-  contracts: deployment.duskContracts,
-});
-const resolveDuskContract = (contractId: string) => {
-  const normalized = contractId.replace(/^0x/u, "").toLowerCase();
-  const contract = Object.values(duskApp.contracts).find(
-    (candidate) =>
-      candidate.contractId.replace(/^0x/u, "").toLowerCase() === normalized
-  );
-  if (!contract) throw new Error(`Unknown Dusk contract ${contractId}`);
-  return contract;
-};
-const l1 = createDuskConnectL1Client(duskApp, {
+const l1 = createDuskConnectL1Client(duskWallet, {
   privacy: "public",
-  resolveContract: resolveDuskContract,
+  encodeContractCall: systemContracts.encodeCall,
+  readContract: systemContracts.read,
+  waitForTransaction: transactions.waitForReceipt,
 });
 ```
 
-The trusted deployment manifest must include presets and data-driver URLs for
-every contract used by the operation. The resulting adapter uses DuskApp for
-RKYV encoding, decoded reads, and transaction-handle tracking.
+The host application owns `systemContracts` and `transactions`. They provide
+RKYV contract-call encoding, decoded system-contract reads, and receipt tracking
+for the active deployment. The SDK does not claim compatibility with generic
+generated data drivers because the system contracts require explicit wire
+representations.
 
 ## Decode an SDK Deposit Envelope
 

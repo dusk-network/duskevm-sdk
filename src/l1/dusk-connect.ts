@@ -1,5 +1,5 @@
 import { sdkError } from "../errors.js";
-import type { JsonValue, MaybePromise, TransactionHash } from "../types.js";
+import type { MaybePromise, TransactionHash } from "../types.js";
 import type {
   DuskL1Client,
   DuskL1ContractReadRequest,
@@ -19,11 +19,6 @@ export type DuskConnectByteLike = string | number[] | Uint8Array | ArrayBuffer;
 /** Gas override accepted by current Dusk Connect transaction requests. */
 export type DuskConnectGas = { limit: string; price: string };
 
-/** Data-driver-backed contract reference accepted by DuskApp. */
-export type DuskConnectContractReference =
-  | string
-  | { contractId: string; driverUrl: string };
-
 /** Current Dusk Connect transaction request subset emitted by this adapter. */
 export type DuskConnectTransactionRequest =
   | {
@@ -32,7 +27,6 @@ export type DuskConnectTransactionRequest =
       to: string;
       amount: string;
       gas?: DuskConnectGas;
-      display?: unknown;
     }
   | {
       kind: "contract_call";
@@ -51,75 +45,33 @@ export type DuskConnectLikeWallet = {
   getGasPrice?(options?: { maxTransactions?: number }): Promise<unknown>;
 };
 
-/** Minimal data-driver-backed Dusk Connect app API consumed by the SDK. */
-export type DuskConnectLikeApp = {
-  wallet: DuskConnectLikeWallet;
-  writeContract(request: {
-    contract: DuskConnectContractReference;
-    functionName: string;
-    args?: JsonValue;
-    privacy: DuskConnectPrivacy;
-    deposit?: string;
-    gas?: DuskConnectGas;
-    display?: unknown;
-  }): Promise<unknown>;
-  readContract?(request: {
-    contract: DuskConnectContractReference;
-    functionName: string;
-    args?: JsonValue;
-  }): Promise<unknown>;
-  waitForTxReceipt?(
-    transactionHash: TransactionHash,
-    options?: { timeoutMs?: number; signal?: AbortSignal }
-  ): Promise<unknown>;
-};
-
-/** Options used to adapt the current Dusk Connect wallet or app facade. */
+/** Options used to adapt the current Dusk Connect wallet facade. */
 export type CreateDuskConnectL1ClientOptions = {
   privacy: DuskConnectPrivacy;
   maxGasPriceTransactions?: number;
-  /** Resolve a contract ID to a DuskApp preset or inline data-driver configuration. */
-  resolveContract?: (contractId: string) => DuskConnectContractReference;
-  /** Encode logical SDK arguments when adapting the low-level wallet instead of DuskApp. */
-  encodeContractCall?: (request: DuskL1ContractReadRequest) => MaybePromise<DuskConnectByteLike>;
+  /** Encode logical SDK arguments into the RKYV bytes expected by Dusk Connect. */
+  encodeContractCall: (request: DuskL1ContractReadRequest) => MaybePromise<DuskConnectByteLike>;
+  /** Optional decoded system-contract reader supplied by the host application. */
   readContract?: DuskL1ContractReader["readContract"];
+  /** Optional receipt tracker supplied by the host application. */
   waitForTransaction?: (
     transactionHash: TransactionHash,
     options?: WaitForDuskTransactionOptions
   ) => Promise<unknown>;
 };
 
-/** Adapt the current Dusk Connect wallet or DuskApp facade to the SDK L1 client. */
+/** Adapt the current Dusk Connect wallet facade to the SDK L1 client. */
 export function createDuskConnectL1Client(
-  connect: DuskConnectLikeWallet | DuskConnectLikeApp,
+  wallet: DuskConnectLikeWallet,
   options: CreateDuskConnectL1ClientOptions
 ): DuskL1Client {
   requirePrivacy(options.privacy);
-  const app = isDuskConnectApp(connect) ? connect : undefined;
-  const wallet: DuskConnectLikeWallet = app
-    ? app.wallet
-    : (connect as DuskConnectLikeWallet);
-  if (app && !options.resolveContract) {
-    throw sdkError("UNSUPPORTED", "DuskApp integration requires a contract resolver");
-  }
-  if (!app && !options.encodeContractCall) {
-    throw sdkError(
-      "UNSUPPORTED",
-      "Low-level Dusk wallet integration requires an encoded contract-call adapter"
-    );
-  }
-
-  const submittedHandles = new Map<TransactionHash, unknown>();
-  const readContract = resolveReadContract(app, options);
 
   return {
     async submitTransaction(request) {
-      const raw = app
-        ? await submitWithApp(app, options, request)
-        : await wallet.sendTransaction(await toWalletRequest(request, options));
-      const submitted = normalizeSubmittedTransaction(raw);
-      if (hasWaitMethod(raw)) submittedHandles.set(submitted.transactionHash, raw);
-      return submitted;
+      return normalizeSubmittedTransaction(
+        await wallet.sendTransaction(await toWalletRequest(request, options))
+      );
     },
     async getGasPriceLux() {
       if (!wallet.getGasPrice) return undefined;
@@ -129,56 +81,21 @@ export function createDuskConnectL1Client(
           : { maxTransactions: options.maxGasPriceTransactions };
       return normalizeGasPrice(await wallet.getGasPrice(gasOptions));
     },
-    async waitForTransaction(transactionHash, waitOptions) {
-      const handle = submittedHandles.get(transactionHash);
-      let raw: unknown;
-      try {
-        raw = handle
-          ? await waitOnHandle(handle, waitOptions)
-          : options.waitForTransaction
-            ? await options.waitForTransaction(transactionHash, waitOptions)
-            : app?.waitForTxReceipt
-              ? await app.waitForTxReceipt(transactionHash, connectWaitOptions(waitOptions))
-              : undefined;
-      } finally {
-        if (handle) submittedHandles.delete(transactionHash);
-      }
-      if (raw === undefined) {
-        throw sdkError(
-          "UNSUPPORTED",
-          "Dusk Connect integration requires a transaction handle or waitForTransaction adapter"
-        );
-      }
-      return normalizeReceipt(transactionHash, raw);
-    },
-    ...(readContract === undefined ? {} : { readContract }),
+    ...(options.waitForTransaction === undefined
+      ? {}
+      : {
+          async waitForTransaction(
+            transactionHash: TransactionHash,
+            waitOptions?: WaitForDuskTransactionOptions
+          ) {
+            return normalizeReceipt(
+              transactionHash,
+              await options.waitForTransaction!(transactionHash, waitOptions)
+            );
+          },
+        }),
+    ...(options.readContract === undefined ? {} : { readContract: options.readContract }),
   };
-}
-
-function isDuskConnectApp(
-  connect: DuskConnectLikeWallet | DuskConnectLikeApp
-): connect is DuskConnectLikeApp {
-  return "wallet" in connect && typeof connect.writeContract === "function";
-}
-
-async function submitWithApp(
-  app: DuskConnectLikeApp,
-  options: CreateDuskConnectL1ClientOptions,
-  request: DuskL1TransactionRequest
-): Promise<unknown> {
-  if (request.kind !== "contract_call") {
-    return app.wallet.sendTransaction(await toWalletRequest(request, options));
-  }
-  if (!request.contractId || !request.method) {
-    throw sdkError("INVALID_OPERATION", "Dusk contract call requires contractId and method");
-  }
-  return app.writeContract({
-    contract: options.resolveContract!(request.contractId),
-    functionName: request.method,
-    ...(request.args === undefined ? {} : { args: request.args }),
-    privacy: options.privacy,
-    ...contractCallOverrides(request),
-  });
 }
 
 async function toWalletRequest(
@@ -241,20 +158,6 @@ function gasOverride(request: DuskL1TransactionRequest): Record<string, unknown>
   });
 }
 
-function resolveReadContract(
-  app: DuskConnectLikeApp | undefined,
-  options: CreateDuskConnectL1ClientOptions
-): DuskL1ContractReader["readContract"] | undefined {
-  if (options.readContract) return options.readContract;
-  if (!app?.readContract || !options.resolveContract) return undefined;
-  return (request) =>
-    app.readContract!({
-      contract: options.resolveContract!(request.contractId),
-      functionName: request.method,
-      ...(request.args === undefined ? {} : { args: request.args }),
-    });
-}
-
 function requirePrivacy(privacy: DuskConnectPrivacy): void {
   if (privacy !== "public" && privacy !== "shielded") {
     throw sdkError("INVALID_OPERATION", 'Dusk Connect privacy must be "public" or "shielded"');
@@ -291,31 +194,6 @@ function normalizeGasPrice(raw: unknown): bigint {
   throw sdkError("CLIENT_ERROR", "Dusk wallet did not return an average gas price", raw);
 }
 
-function hasWaitMethod(raw: unknown): raw is { wait(options?: unknown): Promise<unknown> } {
-  return Boolean(
-    raw && typeof raw === "object" && typeof (raw as { wait?: unknown }).wait === "function"
-  );
-}
-
-async function waitOnHandle(
-  handle: unknown,
-  options?: WaitForDuskTransactionOptions
-): Promise<unknown> {
-  return (handle as {
-    wait(options?: { timeoutMs?: number; signal?: AbortSignal }): Promise<unknown>;
-  }).wait(connectWaitOptions(options));
-}
-
-function connectWaitOptions(
-  options?: WaitForDuskTransactionOptions
-): { timeoutMs?: number; signal?: AbortSignal } | undefined {
-  if (!options) return undefined;
-  return withoutUndefined({
-    timeoutMs: options.timeoutMs,
-    signal: options.signal,
-  }) as { timeoutMs?: number; signal?: AbortSignal };
-}
-
 function normalizeReceipt(transactionHash: TransactionHash, raw: unknown): DuskL1TransactionReceipt {
   if (!raw || typeof raw !== "object") return { transactionHash, raw };
   const value = raw as Record<string, unknown>;
@@ -332,10 +210,35 @@ function normalizeReceipt(transactionHash: TransactionHash, raw: unknown): DuskL
   const blockHeight = normalizeOptionalBigint(value.blockHeight ?? value.height);
   if (blockHeight !== undefined) receipt.blockHeight = blockHeight;
   if (typeof value.finalized === "boolean") receipt.finalized = value.finalized;
-  if (typeof value.success === "boolean") receipt.success = value.success;
-  if (value.status === "executed") receipt.success = true;
-  if (value.status === "failed") receipt.success = false;
+
+  const explicitSuccess = typeof value.success === "boolean" ? value.success : undefined;
+  const connectSuccess = connectReceiptSuccess(value.status, value.ok, raw);
+  if (
+    value.status !== undefined &&
+    explicitSuccess !== undefined &&
+    explicitSuccess !== connectSuccess
+  ) {
+    throw sdkError("CLIENT_ERROR", "Dusk Connect returned contradictory receipt fields", raw);
+  }
+  const success = value.status === undefined ? explicitSuccess : connectSuccess;
+  if (success !== undefined) receipt.success = success;
   return receipt;
+}
+
+function connectReceiptSuccess(status: unknown, ok: unknown, raw: unknown): boolean | undefined {
+  if (status === "timeout") {
+    throw sdkError("TIMEOUT", "Timed out waiting for the Dusk transaction", raw);
+  }
+  if (status === "executed") {
+    if (ok === true) return true;
+    if (ok === false) return false;
+    return undefined;
+  }
+  if (status === "failed") {
+    if (ok === false) return false;
+    throw sdkError("CLIENT_ERROR", "Dusk Connect returned an invalid failed receipt", raw);
+  }
+  return undefined;
 }
 
 function normalizeOptionalBigint(value: unknown): bigint | undefined {

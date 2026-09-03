@@ -74,7 +74,6 @@ compatibility coverage.
 ## Quickstart
 
 ```ts
-import { createDuskApp } from "@dusk/connect";
 import {
   createBridgeClient,
   createDuskConnectL1Client,
@@ -82,22 +81,11 @@ import {
   parseDuskToLux,
 } from "@dusk/evm-sdk";
 
-const duskApp = createDuskApp({
-  wallet: duskWallet,
-  contracts: deployment.duskContracts,
-});
-const resolveDuskContract = (contractId: string) => {
-  const normalized = contractId.replace(/^0x/u, "").toLowerCase();
-  const contract = Object.values(duskApp.contracts).find(
-    (candidate) =>
-      candidate.contractId.replace(/^0x/u, "").toLowerCase() === normalized
-  );
-  if (!contract) throw new Error(`Unknown Dusk contract ${contractId}`);
-  return contract;
-};
-const l1 = createDuskConnectL1Client(duskApp, {
+const l1 = createDuskConnectL1Client(duskWallet, {
   privacy: "public",
-  resolveContract: (contractId) => resolveDuskContract(contractId),
+  encodeContractCall: systemContracts.encodeCall,
+  readContract: systemContracts.read,
+  waitForTransaction: transactions.waitForReceipt,
 });
 
 const bridge = createBridgeClient({
@@ -118,11 +106,11 @@ const submitted = await bridge.submitNativeDeposit({
 console.log(duskEvmTestnet.id, submitted.submittedTransaction.transactionHash);
 ```
 
-`deployment.duskContracts` is the trusted deployment manifest's complete map
-of Dusk system-contract presets, including each contract's data-driver URL.
-The app performs RKYV input encoding, decoded contract reads, and transaction
-tracking. When adapting the low-level Dusk wallet instead, provide explicit
-`encodeContractCall`, `readContract`, and `waitForTransaction` options.
+`systemContracts` and `transactions` are application-owned integration adapters.
+The encoder returns the RKYV argument bytes expected by the selected system
+contract, the reader returns decoded public-interface values, and the transaction
+adapter preserves Dusk Connect's `status` and `ok` fields. The SDK does not ship
+or assume generic system-contract data drivers.
 
 Applications can resume a submitted deposit from its Dusk transaction hash.
 The observer distinguishes a missing receipt from a proven failure and derives
@@ -163,10 +151,6 @@ import {
   waitForDuskEvmContractCallStatus,
 } from "@dusk/evm-sdk";
 
-const l1 = createDuskConnectL1Client(duskApp, {
-  privacy: "public",
-  resolveContract: (contractId) => resolveDuskContract(contractId),
-});
 const message = await submitDuskEvmContractCall(
   l1,
   {

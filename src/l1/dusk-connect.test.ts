@@ -1,6 +1,6 @@
+import { sdkError } from "../errors.js";
 import { createDuskConnectL1Client } from "./dusk-connect.js";
-
-const CONTRACT = { contractId: "bridge", driverUrl: "/bridge.wasm" };
+import { waitForDuskL1Transaction } from "./wait.js";
 
 describe("Dusk Connect L1 client adapter", () => {
   it("uses the current low-level wallet contract-call shape with encoded arguments", async () => {
@@ -48,72 +48,6 @@ describe("Dusk Connect L1 client adapter", () => {
     ]);
   });
 
-  it("uses DuskApp data drivers for encoding, decoded reads, and handle-based waiting", async () => {
-    const writes: unknown[] = [];
-    const reads: unknown[] = [];
-    const wait = vi.fn(async () => ({ hash: "dusk-tx", status: "executed", ok: true }));
-    const app = {
-      wallet: {
-        async sendTransaction() {
-          throw new Error("DuskApp must own contract submission");
-        },
-        async getGasPrice() {
-          return { average: "123", max: "200", median: "100", min: "10" };
-        },
-      },
-      async writeContract(request: unknown) {
-        writes.push(request);
-        return { hash: "dusk-tx", nonce: "7", wait };
-      },
-      async readContract(request: unknown) {
-        reads.push(request);
-        return ["decoded-state"];
-      },
-    };
-    const client = createDuskConnectL1Client(app, {
-      privacy: "shielded",
-      resolveContract: (contractId) => ({ ...CONTRACT, contractId }),
-    });
-
-    await expect(client.getGasPriceLux?.()).resolves.toBe(123n);
-    const submitted = await client.submitTransaction({
-      kind: "contract_call",
-      contractId: "bridge",
-      method: "deposit",
-      args: { amount: "1" },
-      amountLux: 7n,
-      gasLimit: 10n,
-      gasPriceLux: 3n,
-      metadata: { source: "sdk" },
-    });
-    await expect(client.waitForTransaction?.(submitted.transactionHash)).resolves.toMatchObject({
-      transactionHash: "dusk-tx",
-      success: true,
-    });
-    await expect(
-      client.readContract?.({ contractId: "portal", method: "paused" })
-    ).resolves.toEqual(["decoded-state"]);
-
-    expect(writes).toEqual([
-      {
-        contract: { ...CONTRACT, contractId: "bridge" },
-        functionName: "deposit",
-        args: { amount: "1" },
-        privacy: "shielded",
-        deposit: "7",
-        gas: { limit: "10", price: "3" },
-        display: { source: "sdk" },
-      },
-    ]);
-    expect(reads).toEqual([
-      {
-        contract: { ...CONTRACT, contractId: "portal" },
-        functionName: "paused",
-      },
-    ]);
-    expect(wait).toHaveBeenCalledOnce();
-  });
-
   it("uses the Dusk Connect average gas-price statistic", async () => {
     const client = createDuskConnectL1Client(
       {
@@ -130,34 +64,52 @@ describe("Dusk Connect L1 client adapter", () => {
     await expect(client.getGasPriceLux?.()).resolves.toBe(123n);
   });
 
-  it("rejects low-level wallet integration without a contract encoder", () => {
-    expect(() =>
-      createDuskConnectL1Client(
-        {
-          async sendTransaction() {
-            return { hash: "dusk-tx" };
-          },
+  it.each([
+    [{ status: "executed", ok: null }, "CLIENT_ERROR"],
+    [{ status: "failed", ok: false }, "TRANSACTION_FAILED"],
+    [{ status: "timeout", ok: false }, "TIMEOUT"],
+    [{ status: "executed", ok: true, success: false }, "CLIENT_ERROR"],
+  ])("fails closed for non-success receipt %#", async (receipt, code) => {
+    const client = createDuskConnectL1Client(
+      {
+        async sendTransaction() {
+          return { hash: "dusk-tx" };
         },
-        { privacy: "public" }
-      )
-    ).toThrow(/encoded contract-call adapter/);
+      },
+      {
+        privacy: "public",
+        encodeContractCall: async () => "0x",
+        waitForTransaction: async () => ({ hash: "dusk-tx", ...receipt }),
+      }
+    );
+
+    await expect(waitForDuskL1Transaction(client, "dusk-tx")).rejects.toMatchObject({ code });
   });
 
-  it("rejects DuskApp integration without a contract resolver", () => {
-    expect(() =>
-      createDuskConnectL1Client(
-        {
-          wallet: {
-            async sendTransaction() {
-              return { hash: "dusk-tx" };
-            },
-          },
-          async writeContract() {
-            return { hash: "dusk-tx" };
-          },
+  it("allows the host receipt tracker to retry after a transient wait failure", async () => {
+    const waitForTransaction = vi
+      .fn()
+      .mockRejectedValueOnce(sdkError("TIMEOUT", "timed out"))
+      .mockResolvedValueOnce({ hash: "dusk-tx", status: "executed", ok: true });
+    const client = createDuskConnectL1Client(
+      {
+        async sendTransaction() {
+          return { hash: "dusk-tx" };
         },
-        { privacy: "public" }
-      )
-    ).toThrow(/contract resolver/);
+      },
+      {
+        privacy: "public",
+        encodeContractCall: async () => "0x",
+        waitForTransaction,
+      }
+    );
+
+    await expect(waitForDuskL1Transaction(client, "dusk-tx")).rejects.toMatchObject({
+      code: "TIMEOUT",
+    });
+    await expect(waitForDuskL1Transaction(client, "dusk-tx")).resolves.toMatchObject({
+      success: true,
+    });
+    expect(waitForTransaction).toHaveBeenCalledTimes(2);
   });
 });
