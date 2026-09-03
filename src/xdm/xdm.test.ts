@@ -224,6 +224,15 @@ describe("cross-domain message helpers", () => {
 });
 
 describe("withdrawal proof discovery", () => {
+  it("fails clearly when proof discovery has no Dusk contract reader", () => {
+    expect(() =>
+      createWithdrawalGameReader({
+        portalContractId: "portal",
+        reader: {} as never,
+      })
+    ).toThrow(/requires a Dusk L1 readContract adapter/);
+  });
+
   const l2Client: WithdrawalProofL2Client = {
     async getBlock() {
       return { hash: BLOCK_HASH, stateRoot: STATE_ROOT };
@@ -477,6 +486,31 @@ describe("withdrawal proof discovery", () => {
     expect(contractIds).toContain("aa".repeat(32));
     expect(contractIds).toContain("bb".repeat(32));
     expect(contractIds).toContain("cc".repeat(32));
+  });
+
+  it("retries canonical contract ID reads after a transient failure", async () => {
+    let anchorAttempts = 0;
+    const reader = createWithdrawalGameReader({
+      portalContractId: "portal",
+      reader: {
+        async readContract(request) {
+          if (request.method === "anchorStateRegistryContractId") {
+            anchorAttempts += 1;
+            if (anchorAttempts === 1) throw new Error("temporary RPC outage");
+            return hexBytes(`0x${"aa".repeat(32)}` as Hex);
+          }
+          if (request.method === "disputeGameFactoryContractId") {
+            return hexBytes(`0x${"cc".repeat(32)}` as Hex);
+          }
+          if (request.method === "gameCount") return toU256Bytes(1n);
+          throw new Error(`unexpected ${request.method}`);
+        },
+      },
+    });
+
+    await expect(reader.gameCount()).rejects.toThrow("temporary RPC outage");
+    await expect(reader.gameCount()).resolves.toBe(1n);
+    expect(anchorAttempts).toBe(2);
   });
 });
 

@@ -44,6 +44,20 @@ const proof = await findWithdrawalProof({
 });
 ```
 
+The recommended browser reader is the `readContract` method supplied by a
+data-driver-backed `DuskApp`. A custom reader must return decoded values in
+the following public-interface shapes:
+
+- Portal contract IDs and `gameContractId`: 32-byte hex or byte arrays.
+- `gameCount` and L2 sequence numbers: unsigned integers or 32-byte U256 values.
+- `gameAtIndex`: `[gameType, timestamp, gameProxy]`.
+- `gameMetadataAtIndex`: `[rootClaim, l1Head, l2SequenceNumber, extraData]`.
+- `isGameProper` and `isGameRespected`: booleans.
+- `statusForGame`: `0` (in progress), `1` (challenger wins), or `2`
+  (defender wins).
+
+Missing `readContract` support is rejected before discovery starts.
+
 Pass `message.withdrawal` and `proof` to the existing
 `submitProveWithdrawalTransaction` helper. After proof maturity,
 `readWithdrawalPortalState` reports `finalizable`; submit the existing finalize

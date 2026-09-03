@@ -67,6 +67,9 @@ export function createWithdrawalGameReader(params: {
   portalContractId: string;
 }): WithdrawalGameReader {
   requireContractId(params.portalContractId, "OptimismPortal");
+  if (typeof params.reader?.readContract !== "function") {
+    throw sdkError("UNSUPPORTED", "Proof discovery requires a Dusk L1 readContract adapter");
+  }
   const read = params.reader.readContract.bind(params.reader);
   let canonicalContractIds:
     | Promise<{ anchorStateRegistryContractId: string; disputeGameFactoryContractId: string }>
@@ -81,16 +84,21 @@ export function createWithdrawalGameReader(params: {
         contractId: params.portalContractId,
         method: portalMethods.disputeGameFactoryContractId.name,
       }),
-    ]).then(([anchorStateRegistryId, disputeGameFactoryId]) => ({
-      anchorStateRegistryContractId: requireResolvedContractId(
-        anchorStateRegistryId,
-        "AnchorStateRegistry contract id"
-      ),
-      disputeGameFactoryContractId: requireResolvedContractId(
-        disputeGameFactoryId,
-        "DisputeGameFactory contract id"
-      ),
-    }));
+    ])
+      .then(([anchorStateRegistryId, disputeGameFactoryId]) => ({
+        anchorStateRegistryContractId: requireResolvedContractId(
+          anchorStateRegistryId,
+          "AnchorStateRegistry contract id"
+        ),
+        disputeGameFactoryContractId: requireResolvedContractId(
+          disputeGameFactoryId,
+          "DisputeGameFactory contract id"
+        ),
+      }))
+      .catch((error: unknown) => {
+        canonicalContractIds = undefined;
+        throw error;
+      });
     return canonicalContractIds;
   };
 
