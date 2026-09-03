@@ -7,6 +7,7 @@ import {
 
 const MESSENGER_ID = "11".repeat(32);
 const TARGET = "0x2222222222222222222222222222222222222222";
+const TRANSACTION_HASH = "33".repeat(32);
 
 describe("Dusk-to-DuskEVM contract calls", () => {
   it("prepares the allowlisted zero-value Messenger request", () => {
@@ -61,7 +62,7 @@ describe("Dusk-to-DuskEVM contract calls", () => {
       {
         async sendTransaction(request) {
           walletRequests.push(request);
-          return { hash: "dusk-message-tx" };
+          return { hash: TRANSACTION_HASH };
         },
         async getGasPrice() {
           return { average: "3", max: "4", median: "2", min: "1" };
@@ -89,7 +90,7 @@ describe("Dusk-to-DuskEVM contract calls", () => {
       { wait: true }
     );
 
-    expect(submitted.submission.submitted.transactionHash).toBe("dusk-message-tx");
+    expect(submitted.submission.submitted.transactionHash).toBe(TRANSACTION_HASH);
     expect(submitted.submission.receipt?.success).toBe(true);
     expect(walletRequests).toEqual([
       {

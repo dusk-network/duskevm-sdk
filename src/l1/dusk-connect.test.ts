@@ -2,6 +2,9 @@ import { sdkError } from "../errors.js";
 import { createDuskConnectL1Client } from "./dusk-connect.js";
 import { waitForDuskL1Transaction } from "./wait.js";
 
+const TRANSACTION_HASH = "11".repeat(32);
+const OTHER_TRANSACTION_HASH = "22".repeat(32);
+
 describe("Dusk Connect L1 client adapter", () => {
   it("uses the current low-level wallet contract-call shape with encoded arguments", async () => {
     const calls: unknown[] = [];
@@ -10,7 +13,7 @@ describe("Dusk Connect L1 client adapter", () => {
       {
         async sendTransaction(request) {
           calls.push(request);
-          return { hash: "dusk-tx" };
+          return { hash: TRANSACTION_HASH };
         },
       },
       { privacy: "public", encodeContractCall }
@@ -27,7 +30,7 @@ describe("Dusk Connect L1 client adapter", () => {
         gasPriceLux: 2n,
         metadata: { source: "test" },
       })
-    ).resolves.toMatchObject({ transactionHash: "dusk-tx" });
+    ).resolves.toMatchObject({ transactionHash: TRANSACTION_HASH });
 
     expect(encodeContractCall).toHaveBeenCalledWith({
       contractId: "bridge",
@@ -52,7 +55,7 @@ describe("Dusk Connect L1 client adapter", () => {
     const client = createDuskConnectL1Client(
       {
         async sendTransaction() {
-          return { hash: "dusk-tx" };
+          return { hash: TRANSACTION_HASH };
         },
         async getGasPrice() {
           return { average: "123", max: "999", median: "100", min: "1" };
@@ -73,28 +76,28 @@ describe("Dusk Connect L1 client adapter", () => {
     const client = createDuskConnectL1Client(
       {
         async sendTransaction() {
-          return { hash: "dusk-tx" };
+          return { hash: TRANSACTION_HASH };
         },
       },
       {
         privacy: "public",
         encodeContractCall: async () => "0x",
-        waitForTransaction: async () => ({ hash: "dusk-tx", ...receipt }),
+        waitForTransaction: async () => ({ hash: TRANSACTION_HASH, ...receipt }),
       }
     );
 
-    await expect(waitForDuskL1Transaction(client, "dusk-tx")).rejects.toMatchObject({ code });
+    await expect(waitForDuskL1Transaction(client, TRANSACTION_HASH)).rejects.toMatchObject({ code });
   });
 
   it("allows the host receipt tracker to retry after a transient wait failure", async () => {
     const waitForTransaction = vi
       .fn()
       .mockRejectedValueOnce(sdkError("TIMEOUT", "timed out"))
-      .mockResolvedValueOnce({ hash: "dusk-tx", status: "executed", ok: true });
+      .mockResolvedValueOnce({ hash: TRANSACTION_HASH, status: "executed", ok: true });
     const client = createDuskConnectL1Client(
       {
         async sendTransaction() {
-          return { hash: "dusk-tx" };
+          return { hash: TRANSACTION_HASH };
         },
       },
       {
@@ -104,12 +107,95 @@ describe("Dusk Connect L1 client adapter", () => {
       }
     );
 
-    await expect(waitForDuskL1Transaction(client, "dusk-tx")).rejects.toMatchObject({
+    await expect(waitForDuskL1Transaction(client, TRANSACTION_HASH)).rejects.toMatchObject({
       code: "TIMEOUT",
     });
-    await expect(waitForDuskL1Transaction(client, "dusk-tx")).resolves.toMatchObject({
+    await expect(waitForDuskL1Transaction(client, TRANSACTION_HASH)).resolves.toMatchObject({
       success: true,
     });
     expect(waitForTransaction).toHaveBeenCalledTimes(2);
   });
+
+  it("binds a successful receipt to the requested transaction hash", async () => {
+    const receipt = vi.fn(async () => ({
+      hash: OTHER_TRANSACTION_HASH,
+      status: "executed",
+      ok: true,
+    }));
+    const client = duskConnectClientWithReceipt(receipt);
+
+    await expect(waitForDuskL1Transaction(client, TRANSACTION_HASH)).rejects.toMatchObject({
+      code: "CLIENT_ERROR",
+    });
+  });
+
+  it("accepts equivalent hash forms and keeps the canonical requested identity", async () => {
+    const client = duskConnectClientWithReceipt(async () => ({
+      transactionHash: TRANSACTION_HASH.toUpperCase(),
+      hash: `0x${TRANSACTION_HASH}`,
+      status: "executed",
+      ok: true,
+    }));
+
+    await expect(
+      waitForDuskL1Transaction(client, `0X${TRANSACTION_HASH.toUpperCase()}`)
+    ).resolves.toMatchObject({ transactionHash: TRANSACTION_HASH, success: true });
+  });
+
+  it("rejects conflicting receipt hash aliases", async () => {
+    const client = duskConnectClientWithReceipt(async () => ({
+      transactionHash: TRANSACTION_HASH,
+      hash: OTHER_TRANSACTION_HASH,
+      status: "executed",
+      ok: true,
+    }));
+
+    await expect(waitForDuskL1Transaction(client, TRANSACTION_HASH)).rejects.toMatchObject({
+      code: "CLIENT_ERROR",
+    });
+  });
+
+  it("accepts a successful receipt without a reported hash", async () => {
+    const client = duskConnectClientWithReceipt(async () => ({ status: "executed", ok: true }));
+
+    await expect(waitForDuskL1Transaction(client, TRANSACTION_HASH)).resolves.toMatchObject({
+      transactionHash: TRANSACTION_HASH,
+      success: true,
+    });
+  });
+
+  it("rejects a gas price without a gas limit", async () => {
+    const client = createDuskConnectL1Client(
+      {
+        async sendTransaction() {
+          return { hash: TRANSACTION_HASH };
+        },
+      },
+      { privacy: "public", encodeContractCall: async () => "0x" }
+    );
+
+    await expect(
+      client.submitTransaction({
+        kind: "contract_call",
+        contractId: "bridge",
+        method: "deposit",
+        gasPriceLux: 1n,
+      })
+    ).rejects.toMatchObject({ code: "INVALID_OPERATION" });
+  });
 });
+
+function duskConnectClientWithReceipt(waitForTransaction: () => Promise<unknown>) {
+  return createDuskConnectL1Client(
+    {
+      async sendTransaction() {
+        return { hash: TRANSACTION_HASH };
+      },
+    },
+    {
+      privacy: "public",
+      encodeContractCall: async () => "0x",
+      waitForTransaction,
+    }
+  );
+}

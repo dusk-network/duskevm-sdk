@@ -70,6 +70,13 @@ async function withResolvedGasPrice(
   request: DuskL1TransactionRequest,
   options: ResolveDuskGasPriceOptions
 ): Promise<DuskL1TransactionRequest> {
+  if (request.gasLimit === undefined) {
+    if (request.gasPriceLux !== undefined || options.gasPriceLux === undefined) return request;
+    return {
+      ...request,
+      gasPriceLux: await resolveDuskGasPriceLux({ gasPriceLux: options.gasPriceLux }),
+    };
+  }
   if (request.gasPriceLux !== undefined) return request;
 
   const gasOptions: ResolveDuskGasPriceOptions = { client };

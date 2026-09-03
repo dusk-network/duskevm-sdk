@@ -230,30 +230,36 @@ context; no recipient registration transaction is involved.
 
 ```ts
 import {
-  buildFinalizeWithdrawalTransaction,
-  buildProveWithdrawalTransaction,
   parseMessagePassedReceipt,
+  submitFinalizeWithdrawalTransaction,
+  submitProveWithdrawalTransaction,
 } from "@dusk/evm-sdk";
 
 const message = parseMessagePassedReceipt(l2Receipt);
 
-const proveRequest = buildProveWithdrawalTransaction({
-  portalContractId: "optimism-portal-contract-id",
-  withdrawal: message.withdrawal,
-  disputeGameIndex,
-  outputRootProof,
-  withdrawalProof,
-  gasLimit: 1_000_000n,
-});
+const prove = await submitProveWithdrawalTransaction(
+  l1,
+  {
+    portalContractId: "optimism-portal-contract-id",
+    withdrawal: message.withdrawal,
+    disputeGameIndex,
+    outputRootProof,
+    withdrawalProof,
+    gasLimit: 1_000_000n,
+  },
+  { wait: true }
+);
 
-const finalizeRequest = buildFinalizeWithdrawalTransaction({
-  portalContractId: "optimism-portal-contract-id",
-  withdrawal: message.withdrawal,
-  gasLimit: 40_000_000n,
-});
-
-await l1.submitTransaction(proveRequest);
-await l1.submitTransaction(finalizeRequest);
+// Submit only after the Portal reports that the proven withdrawal is finalizable.
+const finalize = await submitFinalizeWithdrawalTransaction(
+  l1,
+  {
+    portalContractId: "optimism-portal-contract-id",
+    withdrawal: message.withdrawal,
+    gasLimit: 40_000_000n,
+  },
+  { wait: true }
+);
 ```
 
 The SDK validates the `MessagePassed` withdrawal hash against the decoded event
