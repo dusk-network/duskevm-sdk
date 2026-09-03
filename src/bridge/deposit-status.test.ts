@@ -131,6 +131,48 @@ describe("deposit lifecycle status", () => {
     });
   });
 
+  it("authenticates relay results by Messenger address and message hash", async () => {
+    const messageHash =
+      "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const spoofedFailure = {
+      ...l2Receipt(FAILED_RELAYED_MESSAGE_TOPIC).logs[0]!,
+      address: "0x1111111111111111111111111111111111111111" as Hex,
+      topics: [FAILED_RELAYED_MESSAGE_TOPIC, messageHash] as Hex[],
+    };
+    const realSuccess = {
+      ...l2Receipt(RELAYED_MESSAGE_TOPIC).logs[0]!,
+      topics: [RELAYED_MESSAGE_TOPIC, messageHash] as Hex[],
+    };
+    const receipt = {
+      ...l2Receipt(),
+      logs: [spoofedFailure, realSuccess],
+    };
+
+    await expect(
+      observeDepositStatus({
+        l1Client: receiptClient(l1Receipt()),
+        l2Client: receiptClient(receipt),
+        l1TransactionHash: L1_HASH,
+        expectedRelay: {
+          messengerAddress: "0x4200000000000000000000000000000000000007",
+          messageHash,
+        },
+      })
+    ).resolves.toMatchObject({ phase: "finalized", metadata: { stage: "completed" } });
+
+    await expect(
+      observeDepositStatus({
+        l1Client: receiptClient(l1Receipt()),
+        l2Client: receiptClient({ ...receipt, logs: [spoofedFailure] }),
+        l1TransactionHash: L1_HASH,
+        expectedRelay: {
+          messengerAddress: "0x4200000000000000000000000000000000000007",
+          messageHash,
+        },
+      })
+    ).rejects.toMatchObject({ code: "CLIENT_ERROR" });
+  });
+
   it("does not misclassify RPC failures or unrecognized receipts as bridge failure", async () => {
     const networkError = new Error("RPC unavailable");
 

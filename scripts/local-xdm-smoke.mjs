@@ -13,6 +13,7 @@ import {
   DUSK_CONTRACT_CALL_TARGET,
   buildWithdrawalOutputProof,
   l2CrossDomainMessengerAbi,
+  prepareDuskEvmContractCall,
   submitDuskContractCall,
   validateDuskEvmDeployment,
   waitForDuskEvmContractCallStatus,
@@ -119,6 +120,10 @@ async function trackDuskToL2(values) {
   const l1RpcUrl = required(values, "l1-rpc-url");
   const l2RpcUrl = required(values, "l2-rpc-url");
   const duskTransactionHash = bytes32(required(values, "dusk-transaction-hash"));
+  const messengerContractId = bytes32(required(values, "messenger-contract-id"));
+  const target = address(required(values, "target"));
+  const payload = byteHex(required(values, "payload"));
+  const minGasLimit = positiveInteger(required(values, "min-gas-limit"), "min-gas-limit");
   const expectedChainId = positiveInteger(required(values, "chain-id"), "chain-id");
   const timeoutMs = positiveInteger(values.get("timeout-ms") ?? "180000", "timeout-ms");
   const chain = defineChain({
@@ -129,10 +134,22 @@ async function trackDuskToL2(values) {
   });
   const l1Client = createPublicClient({ transport: http(l1RpcUrl) });
   const l2Client = createPublicClient({ chain, transport: http(l2RpcUrl) });
+  const prepared = prepareDuskEvmContractCall({
+    messengerContractId,
+    target,
+    payload,
+    minGasLimit,
+  });
   const status = await waitForDuskEvmContractCallStatus({
     l1Client,
     l2Client,
-    duskTransactionHash,
+    submitted: {
+      ...prepared,
+      submission: {
+        submitted: { transactionHash: duskTransactionHash },
+        request: prepared.l1Transaction,
+      },
+    },
     expectedChainId,
     intervalMs: 1_000,
     timeoutMs,

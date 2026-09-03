@@ -76,10 +76,10 @@ as authenticated sender metadata.
 Use `submitDuskEvmContractCall` for the L1 transaction, then
 `observeDuskEvmContractCallStatus` or `waitForDuskEvmContractCallStatus` for the
 derived L2 relay. Both validate the expected L2 chain and canonical Messenger
-predeploy before tracking. Pass the native hash returned at
-`submission.submitted.transactionHash`; the tracker resolves it through the
-adapter's `duskevm_getTransactionHashByDuskHash` method before following the OP
-deposit receipt.
+predeploy before tracking. Pass the complete `SubmittedDuskEvmContractCall` as
+`submitted`; the tracker resolves its native transaction hash through the
+adapter, parses the projected native Messenger event, and accepts only a relay
+event from the canonical L2 Messenger with the exact derived message hash.
 
 The EVM receiver must authenticate `L2CrossDomainMessenger` as `msg.sender` and
 authorize the original Dusk identity returned by `xDomainMessageSender()`.
@@ -96,9 +96,9 @@ const replay = buildDuskEvmMessageReplayTransaction(message);
 
 ## Trust Boundary
 
-Proof discovery does not trust a standalone L2 RPC response. It computes the
-output root from the returned L2 header and message-passer storage proof, then
-accepts it only when it equals a root claim from a game that the Portal currently
-considers proper and respected, has not resolved for the challenger, and is old
-enough to prove against. Rusk, the adapter, op-node, and the fault-proof contracts
-remain the canonical state and resolution authorities.
+Proof discovery does not trust a standalone L2 RPC response. It verifies the
+requested `sentMessages` key and value, validates the MPT inclusion proof against
+the returned message-passer storage root, computes the output root, and accepts
+it only when it equals a root claim from a game that the Portal considers proper
+and historically respected and that has not resolved for the challenger. The
+Portal remains authoritative for transaction-time admission checks.

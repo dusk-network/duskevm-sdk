@@ -16,7 +16,11 @@ import {
   prepareDuskContractCall,
 } from "../l2/index.js";
 import { DUSK_CONTRACT_CALL_TARGET } from "../envelope/index.js";
-import { hashWithdrawal, type WithdrawalTransaction } from "../bridge/index.js";
+import {
+  duskContractIdToEvmAddress,
+  hashWithdrawal,
+  type WithdrawalTransaction,
+} from "../bridge/index.js";
 import {
   appendEmbeddedTerminalNode,
   buildDuskEvmMessageReplayTransaction,
@@ -49,7 +53,6 @@ const CONTRACT_ID = `0x${"33".repeat(32)}` as const;
 const TX_HASH = `0x${"44".repeat(32)}` as const;
 const BLOCK_HASH = `0x${"55".repeat(32)}` as const;
 const STATE_ROOT = `0x${"66".repeat(32)}` as const;
-const STORAGE_ROOT = `0x${"77".repeat(32)}` as const;
 const GAME_PROXY = "0x8888888888888888888888888888888888888888" as const;
 
 const MESSAGE: CrossDomainMessage = {
@@ -225,10 +228,12 @@ describe("withdrawal proof discovery", () => {
     async getBlock() {
       return { hash: BLOCK_HASH, stateRoot: STATE_ROOT };
     },
-    async getProof() {
+    async getProof({ storageKeys }) {
+      const key = storageKeys[0]!;
+      const leaf = withdrawalProofLeaf(key);
       return {
-        storageHash: STORAGE_ROOT,
-        storageProof: [{ proof: ["0xc0"] }],
+        storageHash: keccak256(leaf),
+        storageProof: [{ key, value: 1n, proof: [leaf] }],
       };
     },
   };
@@ -242,14 +247,8 @@ describe("withdrawal proof discovery", () => {
       blockNumber: 12n,
     });
     const gameReader: WithdrawalGameReader = {
-      async respectedGameType() {
-        return 8;
-      },
       async gameCount() {
         return 1n;
-      },
-      async latestGames() {
-        return [{ index: 0n }];
       },
       async game() {
         return {
@@ -278,7 +277,7 @@ describe("withdrawal proof discovery", () => {
     });
   });
 
-  it("skips a root-matching game that the Portal will not admit", async () => {
+  it("walks factory indices across game types and skips games the Portal will not admit", async () => {
     const withdrawalHash = `0x${"98".repeat(32)}` as Hex;
     const output = await buildWithdrawalOutputProof({
       client: l2Client,
@@ -288,14 +287,8 @@ describe("withdrawal proof discovery", () => {
     const olderGame = "0x7777777777777777777777777777777777777777" as const;
     const checked: bigint[] = [];
     const gameReader: WithdrawalGameReader = {
-      async respectedGameType() {
-        return 8;
-      },
       async gameCount() {
         return 2n;
-      },
-      async latestGames() {
-        return [{ index: 1n }, { index: 0n }];
       },
       async game(index) {
         return {
@@ -320,6 +313,83 @@ describe("withdrawal proof discovery", () => {
       })
     ).resolves.toMatchObject({ disputeGameIndex: 0n, disputeGameProxy: olderGame });
     expect(checked).toEqual([1n, 0n]);
+  });
+
+  it("rejects storage proofs that do not prove the requested sentMessages value", async () => {
+    const withdrawalHash = `0x${"97".repeat(32)}` as Hex;
+    const storageKey = withdrawalStorageKey(withdrawalHash);
+    const validLeaf = withdrawalProofLeaf(storageKey);
+    const cases: readonly {
+      name: string;
+      storageHash: Hex;
+      key: Hex;
+      value: bigint;
+      proof: readonly Hex[];
+    }[] = [
+      {
+        name: "wrong key",
+        storageHash: keccak256(validLeaf),
+        key: `0x${"01".repeat(32)}`,
+        value: 1n,
+        proof: [validLeaf],
+      },
+      {
+        name: "absent value",
+        storageHash: keccak256(validLeaf),
+        key: storageKey,
+        value: 0n,
+        proof: [validLeaf],
+      },
+      {
+        name: "empty proof",
+        storageHash: keccak256(validLeaf),
+        key: storageKey,
+        value: 1n,
+        proof: [],
+      },
+      {
+        name: "malformed node",
+        storageHash: keccak256("0xff"),
+        key: storageKey,
+        value: 1n,
+        proof: ["0xff"],
+      },
+      {
+        name: "disconnected node",
+        storageHash: BLOCK_HASH,
+        key: storageKey,
+        value: 1n,
+        proof: [validLeaf],
+      },
+      {
+        name: "wrong terminal value",
+        storageHash: keccak256(withdrawalProofLeaf(storageKey, "0x02")),
+        key: storageKey,
+        value: 1n,
+        proof: [withdrawalProofLeaf(storageKey, "0x02")],
+      },
+    ];
+
+    for (const testCase of cases) {
+      await expect(
+        buildWithdrawalOutputProof({
+          withdrawalHash,
+          blockNumber: 12n,
+          client: {
+            async getBlock() {
+              return { hash: BLOCK_HASH, stateRoot: STATE_ROOT };
+            },
+            async getProof() {
+              return {
+                storageHash: testCase.storageHash,
+                storageProof: [testCase],
+              };
+            },
+          },
+        }),
+        testCase.name
+      ).rejects.toMatchObject({ code: expect.stringMatching(/CLIENT_ERROR|UNAVAILABLE/u) });
+    }
   });
 
   it("appends only the inline child selected by the trie key", () => {
@@ -356,21 +426,15 @@ describe("withdrawal proof discovery", () => {
     let proper = true;
     let respected = true;
     let status = 0;
-    let createdAt = 1;
     const reader = createWithdrawalGameReader({
       portalContractId: "portal",
-      nowSeconds: () => 2n,
       reader: {
         async readContract(request) {
           calls.push(request.method);
           contractIds.push(request.contractId);
           switch (request.method) {
-            case "respectedGameType":
-              return 8;
             case "gameCount":
               return toU256Bytes(1n);
-            case "findLatestGames":
-              return [{ index: toU256Bytes(0n) }];
             case "gameMetadataAtIndex":
               return [hexBytes(BLOCK_HASH), hexBytes(BLOCK_HASH), toU256Bytes(12n), []];
             case "gameAtIndex":
@@ -387,17 +451,13 @@ describe("withdrawal proof discovery", () => {
               return respected;
             case "statusForGame":
               return status;
-            case "createdAtForGame":
-              return createdAt;
             default:
               throw new Error(`unexpected ${request.method}`);
           }
         },
       },
     });
-    expect(await reader.respectedGameType()).toBe(8);
     expect(await reader.gameCount()).toBe(1n);
-    expect(await reader.latestGames(8, 0n, 1n)).toEqual([{ index: 0n }]);
     const game = await reader.game(0n);
     expect(game).toMatchObject({
       gameProxy: GAME_PROXY,
@@ -412,9 +472,6 @@ describe("withdrawal proof discovery", () => {
     expect(await reader.isGameEligible(game)).toBe(false);
     proper = true;
     status = 1;
-    expect(await reader.isGameEligible(game)).toBe(false);
-    status = 0;
-    createdAt = 2;
     expect(await reader.isGameEligible(game)).toBe(false);
     expect(calls).toContain("gameMetadataAtIndex");
     expect(contractIds).toContain("aa".repeat(32));
@@ -552,7 +609,7 @@ describe("submission and lifecycle", () => {
       observeDuskEvmContractCallStatus({
         l1Client,
         l2Client: { ...publicClient, getTransactionReceipt: l1Client.getTransactionReceipt },
-        duskTransactionHash: TX_HASH,
+        submitted: submittedDuskEvmCall(),
         expectedChainId: 745,
       })
     ).resolves.toMatchObject({
@@ -564,6 +621,37 @@ describe("submission and lifecycle", () => {
       },
     });
     expect(requestedReceipts).toEqual([projectedHash]);
+  });
+
+  it("rejects a projected Messenger receipt that does not match the submitted intent", async () => {
+    const projectedHash = `0x${"aa".repeat(32)}` as Hex;
+    const messengerAddress = duskContractIdToEvmAddress(CONTRACT_ID);
+    const receipt = {
+      blockNumber: 10n,
+      status: "success" as const,
+      transactionHash: projectedHash,
+      logs: [sentMessageLog(messengerAddress, { ...MESSAGE, target: SENDER })],
+    };
+    await expect(
+      observeDuskEvmContractCallStatus({
+        l1Client: {
+          async request() {
+            return projectedHash;
+          },
+          async getTransactionReceipt() {
+            return receipt;
+          },
+        },
+        l2Client: {
+          ...publicClient,
+          async getTransactionReceipt() {
+            return receipt;
+          },
+        },
+        submitted: submittedDuskEvmCall(),
+        expectedChainId: 745,
+      })
+    ).rejects.toThrow(/does not match the submitted cross-domain intent/);
   });
 
   it("surfaces finalized delivery failures as replayable", () => {
@@ -772,8 +860,57 @@ function preparedMessagePassedLog(prepared: {
   };
 }
 
+function sentMessageLog(address: Hex, message: CrossDomainMessage) {
+  return {
+    address,
+    blockHash: BLOCK_HASH,
+    blockNumber: 10n,
+    data: encodeAbiParameters(
+      [
+        { type: "address" },
+        { type: "bytes" },
+        { type: "uint256" },
+        { type: "uint256" },
+      ],
+      [message.sender, message.message, message.nonce, message.minGasLimit]
+    ),
+    logIndex: 0,
+    removed: false,
+    topics: encodeEventTopics({
+      abi: l2CrossDomainMessengerAbi,
+      eventName: "SentMessage",
+      args: { target: message.target },
+    }) as readonly Hex[],
+    transactionHash: TX_HASH,
+    transactionIndex: 0,
+  };
+}
+
 function toU256Bytes(value: bigint): number[] {
   return Array.from(hexBytes(toHex(value, { size: 32 })));
+}
+
+function withdrawalProofLeaf(storageKey: Hex, value: Hex = "0x01"): Hex {
+  const trieKey = keccak256(storageKey);
+  return toRlp([`0x20${trieKey.slice(2)}` as Hex, value]);
+}
+
+function submittedDuskEvmCall() {
+  return {
+    messengerContractId: CONTRACT_ID,
+    target: TARGET,
+    payload: "0x1234" as Hex,
+    minGasLimit: 250_000,
+    l1Transaction: {
+      kind: "contract_call" as const,
+      contractId: CONTRACT_ID,
+      method: "sendMessage",
+    },
+    submission: {
+      submitted: { transactionHash: TX_HASH },
+      request: { kind: "contract_call" as const },
+    },
+  };
 }
 
 function hexBytes(value: Hex): Uint8Array {

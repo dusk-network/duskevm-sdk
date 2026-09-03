@@ -1,5 +1,6 @@
 import type { Hex } from "viem";
 import {
+  duskContractIdToEvmAddress,
   observeDepositStatus,
   parseMessagePassedLog,
   resolveDuskTransactionHash,
@@ -19,11 +20,14 @@ import {
   type PrepareDuskContractCallOptions,
   type PreparedDuskContractCall,
 } from "../l2/index.js";
+import type { SubmittedDuskEvmContractCall } from "../l1/index.js";
 import { pollOperationStatus, type BridgeOperationStatus } from "../status/index.js";
 import type { EvmAddress, JsonValue, TransactionHash } from "../types.js";
 import {
   hashDuskCrossDomainMessage,
+  hashDuskEvmCrossDomainMessage,
   parseCrossDomainMessageFromWithdrawal,
+  parseSentMessageReceipt,
   type CrossDomainMessage,
 } from "./message.js";
 
@@ -69,6 +73,10 @@ export type DuskEvmContractCallTrackingMetadata = Omit<
 > & {
   duskTransactionHash: Hex;
   l1TransactionHash?: Hex;
+  messageHash?: Hex;
+  target: EvmAddress;
+  payload: Hex;
+  minGasLimit: number;
 };
 
 /** Validate the chain and canonical Messenger predeploy for a deployment. */
@@ -220,7 +228,7 @@ function findPreparedDuskContractCall(
 export async function observeDuskEvmContractCallStatus(params: {
   l1Client: DepositReceiptClient & DuskTransactionProjectionClient;
   l2Client: DepositReceiptClient & Pick<DuskContractCallPublicClient, "getChainId" | "getBytecode">;
-  duskTransactionHash: string;
+  submitted: SubmittedDuskEvmContractCall;
   expectedChainId: number;
   metadata?: Record<string, JsonValue>;
   now?: () => number;
@@ -229,7 +237,20 @@ export async function observeDuskEvmContractCallStatus(params: {
     client: params.l2Client,
     expectedChainId: params.expectedChainId,
   });
-  const duskTransactionHash = normalizeTransactionHash(params.duskTransactionHash);
+  const duskTransactionHash = normalizeTransactionHash(
+    params.submitted.submission.submitted.transactionHash
+  );
+  const target = normalizeEvmAddress(params.submitted.target, "DuskEVM contract-call target");
+  const payload = normalizePayload(params.submitted.payload);
+  const minGasLimit = params.submitted.minGasLimit;
+  const intentMetadata = {
+    ...(params.metadata ?? {}),
+    xdmDirection: "dusk-to-duskevm" as const,
+    duskTransactionHash,
+    target,
+    payload,
+    minGasLimit,
+  };
   const l1TransactionHash = await resolveDuskTransactionHash(
     params.l1Client,
     duskTransactionHash
@@ -239,28 +260,114 @@ export async function observeDuskEvmContractCallStatus(params: {
       phase: "submitted",
       updatedAt: (params.now ?? Date.now)(),
       metadata: {
-        ...(params.metadata ?? {}),
-        xdmDirection: "dusk-to-duskevm",
-        duskTransactionHash,
+        ...intentMetadata,
         stage: "l1_pending",
       },
     };
   }
+  const normalizedL1TransactionHash = normalizeTransactionHash(l1TransactionHash);
+  const l1Receipt = await receiptOrUndefined(params.l1Client, normalizedL1TransactionHash);
+  if (!l1Receipt) {
+    return {
+      phase: "submitted",
+      updatedAt: (params.now ?? Date.now)(),
+      metadata: {
+        ...intentMetadata,
+        l1TransactionHash: normalizedL1TransactionHash,
+        stage: "l1_pending",
+      },
+    };
+  }
+  if (l1Receipt.status === "reverted") {
+    const status = await observeDepositStatus({
+      l1Client: params.l1Client,
+      l2Client: params.l2Client,
+      l1TransactionHash: normalizedL1TransactionHash,
+      metadata: intentMetadata,
+      ...(params.now === undefined ? {} : { now: params.now }),
+    });
+    return { ...status, metadata: { ...intentMetadata, ...status.metadata } };
+  }
+  const messengerAddress = duskContractIdToEvmAddress(
+    normalizeContractId(params.submitted.messengerContractId)
+  );
+  const message = parseSentMessageReceipt(l1Receipt, messengerAddress);
+  if (
+    normalizeEvmAddress(message.target, "cross-domain target") !== target ||
+    message.message.toLowerCase() !== payload.toLowerCase() ||
+    message.minGasLimit !== BigInt(minGasLimit) ||
+    message.value !== 0n
+  ) {
+    throw sdkError(
+      "CLIENT_ERROR",
+      "Projected Dusk receipt does not match the submitted cross-domain intent",
+      message
+    );
+  }
+  const messageHash = hashDuskEvmCrossDomainMessage(message);
   const status = await observeDepositStatus({
     l1Client: params.l1Client,
     l2Client: params.l2Client,
-    l1TransactionHash: normalizeTransactionHash(l1TransactionHash),
+    l1TransactionHash: normalizedL1TransactionHash,
+    expectedRelay: {
+      messengerAddress: L2_CROSS_DOMAIN_MESSENGER_ADDRESS,
+      messageHash,
+    },
     metadata: {
-      ...(params.metadata ?? {}),
-      xdmDirection: "dusk-to-duskevm",
-      duskTransactionHash,
+      ...intentMetadata,
+      messageHash,
     },
     ...(params.now === undefined ? {} : { now: params.now }),
   });
   return {
     ...status,
-    metadata: { ...status.metadata, duskTransactionHash },
+    metadata: { ...intentMetadata, ...status.metadata, messageHash },
   };
+}
+
+async function receiptOrUndefined(
+  client: DepositReceiptClient,
+  hash: Hex
+): Promise<Awaited<ReturnType<DepositReceiptClient["getTransactionReceipt"]>> | undefined> {
+  try {
+    return await client.getTransactionReceipt({ hash });
+  } catch (error) {
+    if (isReceiptNotFound(error)) return undefined;
+    throw error;
+  }
+}
+
+function isReceiptNotFound(error: unknown): boolean {
+  let current = error;
+  for (let depth = 0; current && depth < 8; depth += 1) {
+    if (
+      current instanceof Error &&
+      (current.name === "TransactionReceiptNotFoundError" ||
+        current.name === "TransactionNotFoundError")
+    ) {
+      return true;
+    }
+    current =
+      typeof current === "object" && "cause" in current
+        ? (current as { cause?: unknown }).cause
+        : undefined;
+  }
+  return false;
+}
+
+function normalizeContractId(value: string): Hex {
+  const normalized = value.startsWith("0x") ? value : `0x${value}`;
+  if (!/^0x[0-9a-fA-F]{64}$/u.test(normalized)) {
+    throw sdkError("CLIENT_ERROR", "L1 cross-domain Messenger contract id must be 32 bytes");
+  }
+  return normalized.toLowerCase() as Hex;
+}
+
+function normalizePayload(value: Hex): Hex {
+  if (!/^0x(?:[0-9a-fA-F]{2})*$/u.test(value)) {
+    throw sdkError("CLIENT_ERROR", "DuskEVM contract-call payload must be byte hex");
+  }
+  return value.toLowerCase() as Hex;
 }
 
 /** Poll a Dusk-to-DuskEVM Messenger call until relay success, failure, or timeout. */

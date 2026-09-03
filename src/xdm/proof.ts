@@ -15,7 +15,6 @@ import type { OutputRootProof, WithdrawalProofData } from "../bridge/index.js";
 
 const ZERO_HASH = `0x${"00".repeat(32)}` as Hex;
 const DEFAULT_GAME_SEARCH_DEPTH = 64n;
-const GAME_PAGE_SIZE = 32n;
 const CHALLENGER_WINS = 1n;
 const portalMethods = duskL1ContractMethods.optimismPortal;
 const gameFactoryMethods = duskL1ContractMethods.disputeGameFactory;
@@ -32,7 +31,11 @@ export type WithdrawalProofL2Client = {
     blockNumber: bigint;
   }): Promise<{
     storageHash: Hex;
-    storageProof: readonly { proof: readonly Hex[] }[];
+    storageProof: readonly {
+      key: Hex;
+      value: bigint;
+      proof: readonly Hex[];
+    }[];
   }>;
 };
 
@@ -46,9 +49,7 @@ export type WithdrawalGame = {
 
 /** Reader abstraction for dispute-game candidates and Portal proof admission. */
 export type WithdrawalGameReader = {
-  respectedGameType(): Promise<number>;
   gameCount(): Promise<bigint>;
-  latestGames(gameType: number, start: bigint, count: bigint): Promise<readonly { index: bigint }[]>;
   game(index: bigint): Promise<WithdrawalGame>;
   isGameEligible(game: WithdrawalGame): Promise<boolean>;
 };
@@ -64,11 +65,9 @@ export type SelectedWithdrawalProof = WithdrawalProofData & {
 export function createWithdrawalGameReader(params: {
   reader: DuskL1ContractReader;
   portalContractId: string;
-  nowSeconds?: () => bigint;
 }): WithdrawalGameReader {
   requireContractId(params.portalContractId, "OptimismPortal");
   const read = params.reader.readContract.bind(params.reader);
-  const nowSeconds = params.nowSeconds ?? (() => BigInt(Math.floor(Date.now() / 1_000)));
   let canonicalContractIds:
     | Promise<{ anchorStateRegistryContractId: string; disputeGameFactoryContractId: string }>
     | undefined;
@@ -96,17 +95,6 @@ export function createWithdrawalGameReader(params: {
   };
 
   return {
-    async respectedGameType() {
-      return Number(
-        normalizeBigint(
-          await read({
-            contractId: params.portalContractId,
-            method: portalMethods.respectedGameType.name,
-          }),
-          "respected game type"
-        )
-      );
-    },
     async gameCount() {
       const { disputeGameFactoryContractId } = await resolveCanonicalContractIds();
       return normalizeBigint(
@@ -116,20 +104,6 @@ export function createWithdrawalGameReader(params: {
         }),
         "game count"
       );
-    },
-    async latestGames(gameType, start, count) {
-      const { disputeGameFactoryContractId } = await resolveCanonicalContractIds();
-      const raw = await read({
-        contractId: disputeGameFactoryContractId,
-        method: gameFactoryMethods.findLatestGames.name,
-        args: [gameType, bigintToU256(start), bigintToU256(count)],
-      });
-      if (!Array.isArray(raw)) {
-        throw sdkError("CLIENT_ERROR", "findLatestGames returned a non-array result", raw);
-      }
-      return raw.map((entry, position) => ({
-        index: normalizeBigint(tupleValue(entry, "index", 0), `game index ${position}`),
-      }));
     },
     async game(index) {
       const { disputeGameFactoryContractId } = await resolveCanonicalContractIds();
@@ -170,7 +144,7 @@ export function createWithdrawalGameReader(params: {
       );
       if (!resolvedGameContractId) return false;
 
-      const [proper, respected, status, createdAt] = await Promise.all([
+      const [proper, respected, status] = await Promise.all([
         read({
           contractId: anchorStateRegistryContractId,
           method: duskL1ContractMethods.anchorStateRegistry.isGameProper.name,
@@ -186,19 +160,11 @@ export function createWithdrawalGameReader(params: {
           method: duskL1ContractMethods.faultDisputeGameHub.statusForGame.name,
           args: game.gameProxy,
         }),
-        read({
-          contractId: resolvedGameContractId,
-          method: duskL1ContractMethods.faultDisputeGameHub.createdAtForGame.name,
-          args: game.gameProxy,
-        }),
       ]);
-      const createdAtSeconds = normalizeUnsignedBigint(createdAt, "game creation timestamp");
       return (
         normalizeBoolean(proper, "isGameProper") &&
         normalizeBoolean(respected, "isGameRespected") &&
-        normalizeUnsignedBigint(status, "game status") !== CHALLENGER_WINS &&
-        createdAtSeconds !== 0n &&
-        nowSeconds() > createdAtSeconds
+        normalizeUnsignedBigint(status, "game status") !== CHALLENGER_WINS
       );
     },
   };
@@ -217,51 +183,39 @@ export async function findWithdrawalProof(params: {
     params.maxGames ?? DEFAULT_GAME_SEARCH_DEPTH,
     "maximum dispute games"
   );
-  const [gameType, gameCount] = await Promise.all([
-    params.gameReader.respectedGameType(),
-    params.gameReader.gameCount(),
-  ]);
+  const gameCount = await params.gameReader.gameCount();
   if (gameCount === 0n) {
     throw sdkError("UNAVAILABLE", "No dispute games have been proposed yet");
   }
 
-  let start = gameCount - 1n;
+  let index = gameCount;
   let remaining = maxGames;
   let lastError: unknown;
 
-  while (remaining > 0n) {
-    const pageSize = remaining < GAME_PAGE_SIZE ? remaining : GAME_PAGE_SIZE;
-    const candidates = await params.gameReader.latestGames(gameType, start, pageSize);
-    if (candidates.length === 0) break;
-
-    for (const candidate of candidates) {
-      try {
-        const game = await params.gameReader.game(candidate.index);
-        if (game.l2BlockNumber < params.withdrawalBlockNumber) continue;
-        if (!(await params.gameReader.isGameEligible(game))) continue;
-        const proof = await buildWithdrawalOutputProof({
-          client: params.l2Client,
-          withdrawalHash,
-          blockNumber: game.l2BlockNumber,
-        });
-        if (proof.outputRoot.toLowerCase() !== game.rootClaim.toLowerCase()) continue;
-        return {
-          disputeGameIndex: game.index,
-          disputeGameProxy: game.gameProxy,
-          l2BlockNumber: game.l2BlockNumber,
-          outputRoot: proof.outputRoot,
-          outputRootProof: proof.outputRootProof,
-          withdrawalProof: proof.withdrawalProof,
-        };
-      } catch (error) {
-        lastError = error;
-      }
+  while (remaining > 0n && index > 0n) {
+    index -= 1n;
+    remaining -= 1n;
+    try {
+      const game = await params.gameReader.game(index);
+      if (game.l2BlockNumber < params.withdrawalBlockNumber) continue;
+      if (!(await params.gameReader.isGameEligible(game))) continue;
+      const proof = await buildWithdrawalOutputProof({
+        client: params.l2Client,
+        withdrawalHash,
+        blockNumber: game.l2BlockNumber,
+      });
+      if (proof.outputRoot.toLowerCase() !== game.rootClaim.toLowerCase()) continue;
+      return {
+        disputeGameIndex: game.index,
+        disputeGameProxy: game.gameProxy,
+        l2BlockNumber: game.l2BlockNumber,
+        outputRoot: proof.outputRoot,
+        outputRootProof: proof.outputRootProof,
+        withdrawalProof: proof.withdrawalProof,
+      };
+    } catch (error) {
+      lastError = error;
     }
-
-    remaining -= BigInt(candidates.length);
-    const oldest = candidates.at(-1)!.index;
-    if (oldest === 0n) break;
-    start = oldest - 1n;
   }
 
   throw sdkError(
@@ -294,6 +248,15 @@ export async function buildWithdrawalOutputProof(params: {
   if (!block.hash) throw sdkError("UNAVAILABLE", `L2 block ${params.blockNumber} has no hash`);
   const storageProof = accountProof.storageProof[0];
   if (!storageProof) throw sdkError("UNAVAILABLE", "Withdrawal storage proof is not available");
+  if (normalizeBytes32(storageProof.key, "withdrawal storage proof key") !== storageKey) {
+    throw sdkError("CLIENT_ERROR", "Withdrawal storage proof is for a different storage key");
+  }
+  if (normalizeUnsignedBigint(storageProof.value, "withdrawal storage value") !== 1n) {
+    throw sdkError("UNAVAILABLE", "Withdrawal is not present in the committed message passer state");
+  }
+  if (storageProof.proof.length === 0) {
+    throw sdkError("UNAVAILABLE", "Withdrawal storage proof is empty");
+  }
 
   const outputRootProof: OutputRootProof = {
     version: ZERO_HASH,
@@ -304,11 +267,112 @@ export async function buildWithdrawalOutputProof(params: {
     ),
     latestBlockhash: normalizeBytes32(block.hash, "L2 block hash"),
   };
+  const withdrawalProof = verifyStorageInclusion(
+    outputRootProof.messagePasserStorageRoot,
+    keccak256(storageKey),
+    storageProof.proof
+  );
   return {
     outputRoot: hashOutputRootProof(outputRootProof),
     outputRootProof,
-    withdrawalProof: appendEmbeddedTerminalNode(keccak256(storageKey), storageProof.proof),
+    withdrawalProof,
   };
+}
+
+function verifyStorageInclusion(
+  storageRoot: Hex,
+  trieKey: Hex,
+  proof: readonly Hex[]
+): readonly Hex[] {
+  const normalizedProof = appendEmbeddedTerminalNode(trieKey, proof);
+  const nibbles = Array.from(hexToBytes(trieKey)).flatMap((byte) => [byte >> 4, byte & 0x0f]);
+  let cursor = 0;
+  let expected: { kind: "hash" | "inline"; value: Hex } = {
+    kind: "hash",
+    value: normalizeBytes32(storageRoot, "message passer storage root"),
+  };
+
+  for (let index = 0; index < normalizedProof.length; index += 1) {
+    const encoded = normalizeNodeHex(normalizedProof[index]);
+    if (
+      (expected.kind === "hash" && keccak256(encoded) !== expected.value) ||
+      (expected.kind === "inline" && encoded !== expected.value)
+    ) {
+      throw sdkError("CLIENT_ERROR", "Withdrawal storage proof does not link to its storage root");
+    }
+
+    let node: ReturnType<typeof fromRlp>;
+    try {
+      node = fromRlp(encoded);
+    } catch (error) {
+      throw sdkError("CLIENT_ERROR", "Withdrawal storage proof contains malformed RLP", error);
+    }
+    if (!Array.isArray(node) || toRlp(node) !== encoded) {
+      throw sdkError("CLIENT_ERROR", "Withdrawal storage proof contains a non-canonical trie node");
+    }
+
+    if (node.length === 17) {
+      if (cursor === nibbles.length) {
+        requireTerminalStorageValue(node[16], index, normalizedProof.length);
+        return normalizedProof;
+      }
+      expected = requireTrieChild(node[nibbles[cursor]!]!);
+      cursor += 1;
+      continue;
+    }
+
+    if (node.length !== 2) {
+      throw sdkError("CLIENT_ERROR", "Withdrawal storage proof contains an invalid trie node");
+    }
+    const path = compactPathNibbles(node[0]);
+    if (
+      !path ||
+      !path.nibbles.every((nibble, offset) => nibbles[cursor + offset] === nibble)
+    ) {
+      throw sdkError("UNAVAILABLE", "Withdrawal storage proof does not include the requested key");
+    }
+    cursor += path.nibbles.length;
+    if (path.leaf) {
+      if (cursor !== nibbles.length) {
+        throw sdkError("UNAVAILABLE", "Withdrawal storage proof terminates at a different key");
+      }
+      requireTerminalStorageValue(node[1], index, normalizedProof.length);
+      return normalizedProof;
+    }
+    expected = requireTrieChild(node[1]);
+  }
+
+  throw sdkError("UNAVAILABLE", "Withdrawal storage proof does not contain a terminal value");
+}
+
+function requireTrieChild(value: unknown): { kind: "hash" | "inline"; value: Hex } {
+  if (Array.isArray(value)) {
+    const encoded = toRlp(value);
+    if (hexToBytes(encoded).length >= 32) {
+      throw sdkError("CLIENT_ERROR", "Withdrawal storage proof embeds an oversized trie node");
+    }
+    return { kind: "inline", value: encoded };
+  }
+  if (typeof value === "string" && /^0x[0-9a-fA-F]{64}$/u.test(value)) {
+    return { kind: "hash", value: value.toLowerCase() as Hex };
+  }
+  throw sdkError("UNAVAILABLE", "Withdrawal storage proof follows an absent trie child");
+}
+
+function requireTerminalStorageValue(value: unknown, index: number, proofLength: number): void {
+  if (index !== proofLength - 1) {
+    throw sdkError("CLIENT_ERROR", "Withdrawal storage proof contains trailing trie nodes");
+  }
+  if (typeof value !== "string" || value.toLowerCase() !== "0x01") {
+    throw sdkError("UNAVAILABLE", "Withdrawal storage proof terminal value is not 0x01");
+  }
+}
+
+function normalizeNodeHex(value: Hex | undefined): Hex {
+  if (!value || !/^0x(?:[0-9a-fA-F]{2})+$/u.test(value)) {
+    throw sdkError("CLIENT_ERROR", "Withdrawal storage proof contains an invalid node encoding");
+  }
+  return value.toLowerCase() as Hex;
 }
 
 /** Storage slot used by L2ToL1MessagePasser.sentMessages. */

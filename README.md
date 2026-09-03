@@ -157,7 +157,7 @@ console.log(message.submission.submitted.transactionHash);
 const delivery = await waitForDuskEvmContractCallStatus({
   l1Client: adapterPublicClient,
   l2Client: duskEvmPublicClient,
-  duskTransactionHash: message.submission.submitted.transactionHash,
+  submitted: message,
   expectedChainId: deployment.l2ChainId,
 });
 ```
