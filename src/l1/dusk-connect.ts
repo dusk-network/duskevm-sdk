@@ -40,6 +40,7 @@ export type DuskConnectTransactionRequest =
       contractId: string;
       fnName: string;
       fnArgs: DuskConnectByteLike;
+      deposit?: string;
       gas?: DuskConnectGas;
       display?: unknown;
     };
@@ -58,6 +59,7 @@ export type DuskConnectLikeApp = {
     functionName: string;
     args?: JsonValue;
     privacy: DuskConnectPrivacy;
+    deposit?: string;
     gas?: DuskConnectGas;
     display?: unknown;
   }): Promise<unknown>;
@@ -175,7 +177,7 @@ async function submitWithApp(
     functionName: request.method,
     ...(request.args === undefined ? {} : { args: request.args }),
     privacy: options.privacy,
-    ...gasAndDisplay(request),
+    ...contractCallOverrides(request),
   });
 }
 
@@ -193,7 +195,7 @@ async function toWalletRequest(
         privacy: options.privacy,
         to: request.to,
         amount: request.amountLux.toString(),
-        ...gasAndDisplay(request),
+        ...gasOverride(request),
       };
     }
     case "contract_call": {
@@ -211,7 +213,7 @@ async function toWalletRequest(
         contractId: request.contractId,
         fnName: request.method,
         fnArgs,
-        ...gasAndDisplay(request),
+        ...contractCallOverrides(request),
       };
     }
     case "raw":
@@ -219,7 +221,15 @@ async function toWalletRequest(
   }
 }
 
-function gasAndDisplay(request: DuskL1TransactionRequest): Record<string, unknown> {
+function contractCallOverrides(request: DuskL1TransactionRequest): Record<string, unknown> {
+  return withoutUndefined({
+    deposit: request.amountLux?.toString(),
+    ...gasOverride(request),
+    display: request.metadata,
+  });
+}
+
+function gasOverride(request: DuskL1TransactionRequest): Record<string, unknown> {
   if (request.gasLimit !== undefined && request.gasPriceLux === undefined) {
     throw sdkError("INVALID_OPERATION", "Dusk gas limit requires a gas price");
   }
@@ -228,7 +238,6 @@ function gasAndDisplay(request: DuskL1TransactionRequest): Record<string, unknow
       request.gasLimit === undefined
         ? undefined
         : { limit: request.gasLimit.toString(), price: request.gasPriceLux!.toString() },
-    display: request.metadata,
   });
 }
 
