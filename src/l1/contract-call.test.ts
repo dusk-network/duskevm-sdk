@@ -7,6 +7,7 @@ import {
 
 const MESSENGER_ID = "11".repeat(32);
 const TARGET = "0x2222222222222222222222222222222222222222";
+const TRANSACTION_HASH = "33".repeat(32);
 
 describe("Dusk-to-DuskEVM contract calls", () => {
   it("prepares the allowlisted zero-value Messenger request", () => {
@@ -57,18 +58,26 @@ describe("Dusk-to-DuskEVM contract calls", () => {
 
   it("submits through Dusk Connect and optionally waits", async () => {
     const walletRequests: unknown[] = [];
-    const client = createDuskConnectL1Client({
-      async sendTransaction(request) {
-        walletRequests.push(request);
-        return { transactionHash: "dusk-message-tx" };
+    const client = createDuskConnectL1Client(
+      {
+        async sendTransaction(request) {
+          walletRequests.push(request);
+          return { hash: TRANSACTION_HASH };
+        },
+        async getGasPrice() {
+          return { average: "3", max: "4", median: "2", min: "1" };
+        },
       },
-      async getGasPrice() {
-        return 3;
-      },
-      async waitForTxExecuted(transactionHash) {
-        return { transactionHash, finalized: true, success: true };
-      },
-    });
+      {
+        privacy: "public",
+        encodeContractCall: async () => new Uint8Array([0x01, 0x02]),
+        waitForTransaction: async (transactionHash) => ({
+          hash: transactionHash,
+          status: "executed",
+          ok: true,
+        }),
+      }
+    );
 
     const submitted = await submitDuskEvmContractCall(
       client,
@@ -81,16 +90,16 @@ describe("Dusk-to-DuskEVM contract calls", () => {
       { wait: true }
     );
 
-    expect(submitted.submission.submitted.transactionHash).toBe("dusk-message-tx");
+    expect(submitted.submission.submitted.transactionHash).toBe(TRANSACTION_HASH);
     expect(submitted.submission.receipt?.success).toBe(true);
     expect(walletRequests).toEqual([
       {
         kind: "contract_call",
-        contract: MESSENGER_ID,
-        fn: "sendMessage",
-        args: [TARGET, "0x1234", 250_000],
-        gasPrice: "3",
-        metadata: {
+        privacy: "public",
+        contractId: MESSENGER_ID,
+        fnName: "sendMessage",
+        fnArgs: new Uint8Array([0x01, 0x02]),
+        display: {
           xdmDirection: "dusk-to-duskevm",
           target: TARGET,
           minGasLimit: 250_000,

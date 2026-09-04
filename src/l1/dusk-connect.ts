@@ -1,7 +1,8 @@
 import { sdkError } from "../errors.js";
-import type { TransactionHash } from "../types.js";
+import type { MaybePromise, TransactionHash } from "../types.js";
 import type {
   DuskL1Client,
+  DuskL1ContractReadRequest,
   DuskL1ContractReader,
   DuskL1SubmittedTransaction,
   DuskL1TransactionReceipt,
@@ -9,31 +10,68 @@ import type {
   WaitForDuskTransactionOptions,
 } from "./types.js";
 
-/** Minimal Dusk Connect-compatible wallet API consumed by the SDK. */
+/** Privacy rail accepted by current Dusk Connect transaction requests. */
+export type DuskConnectPrivacy = "public" | "shielded";
+
+/** Encoded contract arguments accepted by Dusk Connect. */
+export type DuskConnectByteLike = string | number[] | Uint8Array | ArrayBuffer;
+
+/** Gas override accepted by current Dusk Connect transaction requests. */
+export type DuskConnectGas = { limit: string; price: string };
+
+/** Current Dusk Connect transaction request subset emitted by this adapter. */
+export type DuskConnectTransactionRequest =
+  | {
+      kind: "transfer";
+      privacy: DuskConnectPrivacy;
+      to: string;
+      amount: string;
+      gas?: DuskConnectGas;
+    }
+  | {
+      kind: "contract_call";
+      privacy: DuskConnectPrivacy;
+      contractId: string;
+      fnName: string;
+      fnArgs: DuskConnectByteLike;
+      deposit?: string;
+      gas?: DuskConnectGas;
+      display?: unknown;
+    };
+
+/** Minimal current Dusk Connect wallet API consumed by the SDK. */
 export type DuskConnectLikeWallet = {
-  sendTransaction(request: Record<string, unknown>): Promise<unknown>;
+  sendTransaction(request: DuskConnectTransactionRequest): Promise<unknown>;
   getGasPrice?(options?: { maxTransactions?: number }): Promise<unknown>;
-  waitForTxExecuted?(
+};
+
+/** Options used to adapt the current Dusk Connect wallet facade. */
+export type CreateDuskConnectL1ClientOptions = {
+  privacy: DuskConnectPrivacy;
+  maxGasPriceTransactions?: number;
+  /** Encode logical SDK arguments into the RKYV bytes expected by Dusk Connect. */
+  encodeContractCall: (request: DuskL1ContractReadRequest) => MaybePromise<DuskConnectByteLike>;
+  /** Optional decoded system-contract reader supplied by the host application. */
+  readContract?: DuskL1ContractReader["readContract"];
+  /** Optional receipt tracker supplied by the host application. */
+  waitForTransaction?: (
     transactionHash: TransactionHash,
     options?: WaitForDuskTransactionOptions
-  ): Promise<unknown>;
+  ) => Promise<unknown>;
 };
 
-/** Options used to adapt a Dusk Connect-compatible wallet. */
-export type CreateDuskConnectL1ClientOptions = {
-  maxGasPriceTransactions?: number;
-  readContract?: DuskL1ContractReader["readContract"];
-};
-
-/** Adapt a Dusk Connect-compatible wallet to the SDK's L1 client interface. */
+/** Adapt the current Dusk Connect wallet facade to the SDK L1 client. */
 export function createDuskConnectL1Client(
   wallet: DuskConnectLikeWallet,
-  options: CreateDuskConnectL1ClientOptions = {}
+  options: CreateDuskConnectL1ClientOptions
 ): DuskL1Client {
+  requirePrivacy(options.privacy);
+
   return {
     async submitTransaction(request) {
-      const raw = await wallet.sendTransaction(toWalletRequest(request));
-      return normalizeSubmittedTransaction(raw);
+      return normalizeSubmittedTransaction(
+        await wallet.sendTransaction(await toWalletRequest(request, options))
+      );
     },
     async getGasPriceLux() {
       if (!wallet.getGasPrice) return undefined;
@@ -43,43 +81,83 @@ export function createDuskConnectL1Client(
           : { maxTransactions: options.maxGasPriceTransactions };
       return normalizeGasPrice(await wallet.getGasPrice(gasOptions));
     },
-    async waitForTransaction(transactionHash, waitOptions) {
-      if (!wallet.waitForTxExecuted) {
-        throw sdkError("UNSUPPORTED", "The Dusk wallet does not expose waitForTxExecuted");
-      }
-      return normalizeReceipt(transactionHash, await wallet.waitForTxExecuted(transactionHash, waitOptions));
-    },
+    ...(options.waitForTransaction === undefined
+      ? {}
+      : {
+          async waitForTransaction(
+            transactionHash: TransactionHash,
+            waitOptions?: WaitForDuskTransactionOptions
+          ) {
+            return normalizeReceipt(
+              transactionHash,
+              await options.waitForTransaction!(transactionHash, waitOptions)
+            );
+          },
+        }),
     ...(options.readContract === undefined ? {} : { readContract: options.readContract }),
   };
 }
 
-function toWalletRequest(request: DuskL1TransactionRequest): Record<string, unknown> {
-  const base = withoutUndefined({
-    kind: request.kind,
-    gasLimit: request.gasLimit?.toString(),
-    gasPrice: request.gasPriceLux?.toString(),
-    metadata: request.metadata,
-  });
-
+async function toWalletRequest(
+  request: DuskL1TransactionRequest,
+  options: CreateDuskConnectL1ClientOptions
+): Promise<DuskConnectTransactionRequest> {
   switch (request.kind) {
-    case "transfer":
-      return withoutUndefined({
-        ...base,
+    case "transfer": {
+      if (!request.to || request.amountLux === undefined) {
+        throw sdkError("INVALID_OPERATION", "Dusk transfer requires to and amountLux");
+      }
+      return {
+        kind: "transfer",
+        privacy: options.privacy,
         to: request.to,
-        amount: request.amountLux?.toString(),
+        amount: request.amountLux.toString(),
+        ...gasOverride(request),
+      };
+    }
+    case "contract_call": {
+      if (!request.contractId || !request.method) {
+        throw sdkError("INVALID_OPERATION", "Dusk contract call requires contractId and method");
+      }
+      const fnArgs = await options.encodeContractCall({
+        contractId: request.contractId,
+        method: request.method,
+        ...(request.args === undefined ? {} : { args: request.args }),
       });
-    case "contract_call":
-      return withoutUndefined({
-        ...base,
-        contract: request.contractId,
-        fn: request.method,
-        args: request.args ?? null,
-      });
+      return {
+        kind: "contract_call",
+        privacy: options.privacy,
+        contractId: request.contractId,
+        fnName: request.method,
+        fnArgs,
+        ...contractCallOverrides(request),
+      };
+    }
     case "raw":
-      return withoutUndefined({
-        ...base,
-        payload: request.payload ?? null,
-      });
+      throw sdkError("UNSUPPORTED", "Dusk Connect does not support raw SDK transactions");
+  }
+}
+
+function contractCallOverrides(request: DuskL1TransactionRequest): Record<string, unknown> {
+  return withoutUndefined({
+    deposit: request.amountLux?.toString(),
+    ...gasOverride(request),
+    display: request.metadata,
+  });
+}
+
+function gasOverride(request: DuskL1TransactionRequest): Record<string, unknown> {
+  const { gasLimit, gasPriceLux } = request;
+  if (gasLimit === undefined && gasPriceLux === undefined) return {};
+  if (gasLimit === undefined || gasPriceLux === undefined) {
+    throw sdkError("INVALID_OPERATION", "Dusk gas override requires both limit and price");
+  }
+  return { gas: { limit: gasLimit.toString(), price: gasPriceLux.toString() } };
+}
+
+function requirePrivacy(privacy: DuskConnectPrivacy): void {
+  if (privacy !== "public" && privacy !== "shielded") {
+    throw sdkError("INVALID_OPERATION", 'Dusk Connect privacy must be "public" or "shielded"');
   }
 }
 
@@ -106,37 +184,87 @@ function normalizeSubmittedTransaction(raw: unknown): DuskL1SubmittedTransaction
 function normalizeGasPrice(raw: unknown): bigint {
   if (typeof raw === "bigint") return raw;
   if (typeof raw === "number" && Number.isSafeInteger(raw)) return BigInt(raw);
-  if (typeof raw === "string" && /^\d+$/.test(raw)) return BigInt(raw);
+  if (typeof raw === "string" && /^\d+$/u.test(raw)) return BigInt(raw);
   if (raw && typeof raw === "object") {
-    const value = raw as Record<string, unknown>;
-    return normalizeGasPrice(value.gasPrice ?? value.price ?? value.lux);
+    return normalizeGasPrice((raw as Record<string, unknown>).average);
   }
-  throw sdkError("CLIENT_ERROR", "Dusk wallet did not return a usable gas price", raw);
+  throw sdkError("CLIENT_ERROR", "Dusk wallet did not return an average gas price", raw);
 }
 
 function normalizeReceipt(transactionHash: TransactionHash, raw: unknown): DuskL1TransactionReceipt {
-  if (!raw || typeof raw !== "object") return { transactionHash, raw };
+  const requestedHash = normalizeDuskTransactionHash(transactionHash, "requested transaction hash");
+  if (!raw || typeof raw !== "object") return { transactionHash: requestedHash, raw };
   const value = raw as Record<string, unknown>;
-  const normalizedHash =
-    typeof value.transactionHash === "string"
-      ? value.transactionHash
-      : typeof value.hash === "string"
-        ? value.hash
-        : transactionHash;
+  const transactionHashAlias = normalizeReportedHash(value.transactionHash, "transactionHash", raw);
+  const hashAlias = normalizeReportedHash(value.hash, "hash", raw);
+  if (
+    transactionHashAlias !== undefined &&
+    hashAlias !== undefined &&
+    transactionHashAlias !== hashAlias
+  ) {
+    throw sdkError("CLIENT_ERROR", "Dusk receipt contains conflicting transaction hashes", raw);
+  }
+  const reportedHash = transactionHashAlias ?? hashAlias;
+  if (reportedHash !== undefined && reportedHash !== requestedHash) {
+    throw sdkError("CLIENT_ERROR", "Dusk receipt does not match the requested transaction", raw);
+  }
   const receipt: DuskL1TransactionReceipt = {
-    transactionHash: normalizedHash,
+    transactionHash: requestedHash,
     raw,
   };
   const blockHeight = normalizeOptionalBigint(value.blockHeight ?? value.height);
   if (blockHeight !== undefined) receipt.blockHeight = blockHeight;
   if (typeof value.finalized === "boolean") receipt.finalized = value.finalized;
-  if (typeof value.success === "boolean") receipt.success = value.success;
+
+  const explicitSuccess = typeof value.success === "boolean" ? value.success : undefined;
+  const connectSuccess = connectReceiptSuccess(value.status, value.ok, raw);
+  if (
+    value.status !== undefined &&
+    explicitSuccess !== undefined &&
+    explicitSuccess !== connectSuccess
+  ) {
+    throw sdkError("CLIENT_ERROR", "Dusk Connect returned contradictory receipt fields", raw);
+  }
+  const success = value.status === undefined ? explicitSuccess : connectSuccess;
+  if (success !== undefined) receipt.success = success;
   return receipt;
+}
+
+function connectReceiptSuccess(status: unknown, ok: unknown, raw: unknown): boolean | undefined {
+  if (status === "timeout") {
+    throw sdkError("TIMEOUT", "Timed out waiting for the Dusk transaction", raw);
+  }
+  if (status === "executed") {
+    if (ok === true) return true;
+    if (ok === false) return false;
+    return undefined;
+  }
+  if (status === "failed") {
+    if (ok === false) return false;
+    throw sdkError("CLIENT_ERROR", "Dusk Connect returned an invalid failed receipt", raw);
+  }
+  return undefined;
+}
+
+function normalizeReportedHash(value: unknown, field: string, raw: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") {
+    throw sdkError("CLIENT_ERROR", `Dusk receipt ${field} is not a transaction hash`, raw);
+  }
+  return normalizeDuskTransactionHash(value, `receipt ${field}`);
+}
+
+function normalizeDuskTransactionHash(value: string, label: string): string {
+  const match = /^(?:0x)?([0-9a-f]{64})$/iu.exec(value);
+  if (!match) {
+    throw sdkError("CLIENT_ERROR", `Dusk ${label} must contain exactly 32 bytes`);
+  }
+  return match[1]!.toLowerCase();
 }
 
 function normalizeOptionalBigint(value: unknown): bigint | undefined {
   if (typeof value === "bigint") return value;
   if (typeof value === "number" && Number.isSafeInteger(value)) return BigInt(value);
-  if (typeof value === "string" && /^\d+$/.test(value)) return BigInt(value);
+  if (typeof value === "string" && /^\d+$/u.test(value)) return BigInt(value);
   return undefined;
 }

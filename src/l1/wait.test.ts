@@ -18,11 +18,29 @@ describe("Dusk L1 submit and wait helpers", () => {
           kind: "contract_call",
           contractId: "bridge",
           method: "deposit",
+          gasLimit: 100n,
         }
       )
     ).resolves.toMatchObject({
       submitted: { transactionHash: "tx-hash" },
-      request: { gasPriceLux: 12n },
+      request: { gasLimit: 100n, gasPriceLux: 12n },
+    });
+  });
+
+  it("lets the wallet manage gas when no override is supplied", async () => {
+    const getGasPriceLux = vi.fn(async () => 12n);
+    const submitTransaction = vi.fn(async () => ({ transactionHash: "tx-hash" }));
+
+    await submitDuskL1Transaction(
+      { submitTransaction, getGasPriceLux },
+      { kind: "contract_call", contractId: "bridge", method: "deposit" }
+    );
+
+    expect(getGasPriceLux).not.toHaveBeenCalled();
+    expect(submitTransaction).toHaveBeenCalledWith({
+      kind: "contract_call",
+      contractId: "bridge",
+      method: "deposit",
     });
   });
 

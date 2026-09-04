@@ -7,56 +7,48 @@ const contractCallFormat = duskL1WireFormats.duskContractCallV1;
 /** Fixed L1 Messenger target identifying a Dusk contract-call envelope. */
 export const DUSK_CONTRACT_CALL_TARGET: `0x${string}` = contractCallFormat.target;
 
+/** Fixed native receiver invoked for every generic application message. */
+export const DUSK_CONTRACT_CALL_RECEIVER_ENTRYPOINT: "dusk_xdm_execute" =
+  contractCallFormat.receiverEntrypoint;
+
 /** First supported Dusk contract-call envelope version. */
 export const DUSK_CONTRACT_CALL_ENVELOPE_VERSION: 1 = contractCallFormat.version;
 
 /** Envelope kind for a zero-value call into a Dusk contract. */
 export const DUSK_CONTRACT_CALL_KIND: 1 = contractCallFormat.kind;
 
-/** Maximum Dusk entrypoint length accepted by the generic application route. */
-export const MAX_DUSK_CONTRACT_CALL_ENTRYPOINT_BYTES: 64 =
-  contractCallFormat.maxEntrypointBytes;
-
-/** Decoded L2-to-Dusk direct contract-call envelope. */
+/** Decoded L2-to-Dusk application-call envelope. */
 export type DuskContractCallEnvelope = {
   version: typeof DUSK_CONTRACT_CALL_ENVELOPE_VERSION;
   kind: typeof DUSK_CONTRACT_CALL_KIND;
   targetContractId: Hex;
-  entrypoint: string;
-  fnArgs: Hex;
+  payload: Hex;
 };
 
-/** Input used to encode an L2-to-Dusk direct contract call. */
+/** Input used to encode an L2-to-Dusk application call. */
 export type EncodeDuskContractCallEnvelopeOptions = {
   targetContractId: Hex;
-  entrypoint: string;
-  fnArgs?: Hex | Uint8Array;
+  payload?: Hex | Uint8Array;
 };
 
 const FIXED_HEADER_BYTES = contractCallFormat.fixedHeaderBytes;
 const CONTRACT_ID_BYTES = contractCallFormat.targetContractIdBytes;
-const entrypointPattern = new RegExp(contractCallFormat.entrypointPattern);
-const textEncoder = new TextEncoder();
-const textDecoder = new TextDecoder("utf-8", { fatal: true });
 
-/** Encode a zero-value direct Dusk contract call for the fixed Messenger target. */
+/** Encode a zero-value application call for the fixed Messenger target. */
 export function encodeDuskContractCallEnvelope(
   options: EncodeDuskContractCallEnvelopeOptions
 ): Hex {
   const targetContractId = normalizeContractId(options.targetContractId);
-  const entrypoint = normalizeEntrypoint(options.entrypoint);
-  const fnArgs = normalizeBytes(options.fnArgs ?? "0x", "Dusk contract-call fnArgs");
-  const output = new Uint8Array(FIXED_HEADER_BYTES + entrypoint.length + fnArgs.length);
+  const payload = normalizeBytes(options.payload ?? "0x", "Dusk contract-call payload");
+  const output = new Uint8Array(FIXED_HEADER_BYTES + payload.length);
   output[0] = DUSK_CONTRACT_CALL_ENVELOPE_VERSION;
   output[1] = DUSK_CONTRACT_CALL_KIND;
   output.set(targetContractId, 2);
-  new DataView(output.buffer).setUint16(34, entrypoint.length, false);
-  output.set(entrypoint, FIXED_HEADER_BYTES);
-  output.set(fnArgs, FIXED_HEADER_BYTES + entrypoint.length);
+  output.set(payload, FIXED_HEADER_BYTES);
   return bytesToHex(output);
 }
 
-/** Decode and strictly validate a Dusk direct contract-call envelope. */
+/** Decode and strictly validate a Dusk application-call envelope. */
 export function decodeDuskContractCallEnvelope(
   input: Hex | Uint8Array
 ): DuskContractCallEnvelope {
@@ -80,39 +72,13 @@ export function decodeDuskContractCallEnvelope(
     );
   }
 
-  const targetContractId = bytes.slice(2, 34);
+  const targetContractId = bytes.slice(2, FIXED_HEADER_BYTES);
   requireNonZero(targetContractId, "Dusk contract-call target");
-
-  const entrypointLength = new DataView(
-    bytes.buffer,
-    bytes.byteOffset,
-    bytes.byteLength
-  ).getUint16(34, false);
-  if (
-    entrypointLength === 0 ||
-    entrypointLength > MAX_DUSK_CONTRACT_CALL_ENTRYPOINT_BYTES
-  ) {
-    throw sdkError("INVALID_ENVELOPE", "Invalid Dusk contract-call entrypoint length");
-  }
-  const fnArgsOffset = FIXED_HEADER_BYTES + entrypointLength;
-  if (bytes.length < fnArgsOffset) {
-    throw sdkError("INVALID_ENVELOPE", "Truncated Dusk contract-call entrypoint");
-  }
-
-  let entrypoint: string;
-  try {
-    entrypoint = textDecoder.decode(bytes.slice(FIXED_HEADER_BYTES, fnArgsOffset));
-  } catch {
-    throw sdkError("INVALID_ENVELOPE", "Dusk contract-call entrypoint must be valid UTF-8");
-  }
-  normalizeEntrypoint(entrypoint);
-
   return {
     version: DUSK_CONTRACT_CALL_ENVELOPE_VERSION,
     kind: DUSK_CONTRACT_CALL_KIND,
     targetContractId: bytesToHex(targetContractId),
-    entrypoint,
-    fnArgs: bytesToHex(bytes.slice(fnArgsOffset)),
+    payload: bytesToHex(bytes.slice(FIXED_HEADER_BYTES)),
   };
 }
 
@@ -128,24 +94,9 @@ function normalizeContractId(contractId: Hex): Uint8Array {
   return bytes;
 }
 
-function normalizeEntrypoint(value: string): Uint8Array {
-  if (contractCallFormat.reservedEntrypoints.some((entrypoint) => entrypoint === value)) {
-    throw sdkError("INVALID_ENVELOPE", "Dusk contract-call entrypoint is reserved");
-  }
-  if (!entrypointPattern.test(value)) {
-    throw sdkError("INVALID_ENVELOPE", "Invalid Dusk contract-call entrypoint name");
-  }
-
-  const bytes = textEncoder.encode(value);
-  if (bytes.length === 0 || bytes.length > MAX_DUSK_CONTRACT_CALL_ENTRYPOINT_BYTES) {
-    throw sdkError("INVALID_ENVELOPE", "Invalid Dusk contract-call entrypoint length");
-  }
-  return bytes;
-}
-
 function normalizeBytes(value: Hex | Uint8Array, label: string): Uint8Array {
   if (value instanceof Uint8Array) return Uint8Array.from(value);
-  if (!/^0x(?:[0-9a-fA-F]{2})*$/.test(value)) {
+  if (!/^0x(?:[0-9a-fA-F]{2})*$/u.test(value)) {
     throw sdkError("INVALID_ENVELOPE", `${label} must be 0x-prefixed byte hex`);
   }
   return hexToBytes(value);

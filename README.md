@@ -24,6 +24,8 @@ not replace the DuskEVM adapter, op-node, Rusk, or wallet software.
   DuskEVM cross-domain relay receipt.
 - Withdrawal helpers for native, DRC20, and DRC721 L2 initiation calls,
   `MessagePassed` receipt parsing, and L1 prove/finalize transaction requests.
+- Generic XDM submission, deployment validation, dispute-game proof discovery,
+  prove/finalize lifecycle state, delivery checks, and exact-message replay.
 - Versioned Dusk asset-recipient and native contract-credit encoders for bridge
   withdrawal `extraData`.
 - Native contract-credit parsing, authoritative state reads, lifecycle status,
@@ -64,7 +66,7 @@ npm run check
 npm run smoke:local:dry-run
 ```
 
-Supported targets are Node.js 22 and 24, Deno 2, and modern browsers using ESM.
+Supported targets are Node.js 22 or newer, Deno 2, and modern browsers using ESM.
 The packed npm artifact is tested through every export path and a Vite browser
 bundle. Bun and Cloudflare Workers remain unclaimed until they have dedicated
 compatibility coverage.
@@ -79,7 +81,12 @@ import {
   parseDuskToLux,
 } from "@dusk/evm-sdk";
 
-const l1 = createDuskConnectL1Client(duskWallet);
+const l1 = createDuskConnectL1Client(duskWallet, {
+  privacy: "public",
+  encodeContractCall: systemContracts.encodeCall,
+  readContract: systemContracts.read,
+  waitForTransaction: transactions.waitForReceipt,
+});
 
 const bridge = createBridgeClient({
   l1,
@@ -99,17 +106,32 @@ const submitted = await bridge.submitNativeDeposit({
 console.log(duskEvmTestnet.id, submitted.submittedTransaction.transactionHash);
 ```
 
+`systemContracts` and `transactions` are application-owned integration adapters.
+The encoder returns the RKYV argument bytes expected by the selected system
+contract, the reader returns decoded public-interface values, and the transaction
+adapter preserves Dusk Connect's `status` and `ok` fields. The SDK does not ship
+or assume generic system-contract data drivers.
+
 Applications can resume a submitted deposit from its Dusk transaction hash.
 The observer distinguishes a missing receipt from a proven failure and derives
 the OP L2 transaction hash from the adapter's `TransactionDeposited` log:
 
 ```ts
-import { observeDepositStatus } from "@dusk/evm-sdk";
+import {
+  observeDepositStatus,
+  resolveDuskTransactionHash,
+} from "@dusk/evm-sdk";
+
+const l1TransactionHash = await resolveDuskTransactionHash(
+  adapterPublicClient,
+  submitted.submittedTransaction.transactionHash,
+);
+if (!l1TransactionHash) throw new Error("The Dusk transaction is not projected yet");
 
 const status = await observeDepositStatus({
   l1Client: adapterPublicClient,
   l2Client: duskEvmPublicClient,
-  l1TransactionHash: submitted.submittedTransaction.transactionHash,
+  l1TransactionHash,
 });
 
 console.log(status.metadata.stage, status.metadata.l2TransactionHash);
@@ -126,9 +148,9 @@ network configuration; it is deployment-specific and is not inferred from a
 import {
   createDuskConnectL1Client,
   submitDuskEvmContractCall,
+  waitForDuskEvmContractCallStatus,
 } from "@dusk/evm-sdk";
 
-const l1 = createDuskConnectL1Client(duskWallet);
 const message = await submitDuskEvmContractCall(
   l1,
   {
@@ -141,6 +163,13 @@ const message = await submitDuskEvmContractCall(
 );
 
 console.log(message.submission.submitted.transactionHash);
+
+const delivery = await waitForDuskEvmContractCallStatus({
+  l1Client: adapterPublicClient,
+  l2Client: duskEvmPublicClient,
+  submitted: message,
+  expectedChainId: deployment.l2ChainId,
+});
 ```
 
 The L2 receiver authenticates the standard L2 Messenger and reads the original
@@ -155,18 +184,17 @@ bridge APIs.
 ## Calls From DuskEVM To Dusk
 
 An L2 application can target a Dusk contract by its complete 32-byte
-`ContractId` and exported entrypoint. Encode the arguments with that contract's
-Dusk data driver, then pass the exact Piecrust bytes to the SDK:
+`ContractId`. Pass the raw application payload to the SDK; the native Messenger
+adds the RKYV `Vec<u8>` framing when it invokes the receiver's fixed
+`dusk_xdm_execute(payload)` entrypoint:
 
 ```ts
 import { prepareDuskContractCall } from "@dusk/evm-sdk";
 
-const fnArgs = await targetContract.encode("record_value", { value: "42" });
 const call = prepareDuskContractCall({
   targetContractId:
     "0x1212121212121212121212121212121212121212121212121212121212121212",
-  entrypoint: "record_value",
-  fnArgs,
+  payload: applicationMessage,
   minGasLimit: 150_000,
 });
 
@@ -177,10 +205,11 @@ await walletClient.sendTransaction({
 });
 ```
 
-No receiver registration or XDM-specific callback is required. A permissionless
-entrypoint executes normally. An entrypoint that authorizes EVM identities must
-verify the immediate L1 Messenger caller and check the authenticated original
-sender from Messenger context. This path is intentionally zero-value;
+No receiver registration or EVM-address mapping is required. The native target
+opts in by exporting `dusk_xdm_execute(Vec<u8>)`. It must authenticate the
+immediate L1 Messenger caller and authorize the original EVM sender through
+`xDomainMessageSender()`. It must trap to reject delivery, and its application
+processing should be idempotent. This path is intentionally zero-value;
 contract-directed native DUSK uses `encodeDuskNativeContractCredit` with a
 native withdrawal.
 
@@ -222,9 +251,9 @@ helpers reject invalid values before a claim is presented to the application.
 ## Withdrawal Shape
 
 Withdrawals are OP-style multi-stage operations. The SDK prepares the L2 call,
-parses the `MessagePassed` receipt, and builds Dusk L1 portal requests for
-prove/finalize. It does not select dispute games or synthesize withdrawal
-proofs; those come from op-node/L2/Rusk observations.
+parses the `MessagePassed` receipt, builds a hash-bound output/MPT proof from
+the L2 client, selects a matching Portal-admissible dispute game through a caller-
+supplied Dusk contract reader, and builds Dusk L1 prove/finalize requests.
 
 ```ts
 import {
@@ -252,12 +281,20 @@ await walletClient.sendTransaction({
 
 const message = parseMessagePassedReceipt(l2Receipt);
 
+const proof = await findWithdrawalProof({
+  l2Client,
+  gameReader: createWithdrawalGameReader({
+    reader: l1,
+    portalContractId: "optimism-portal-contract-id",
+  }),
+  withdrawalHash: message.withdrawalHash,
+  withdrawalBlockNumber: message.blockNumber,
+});
+
 const prove = buildProveWithdrawalTransaction({
   portalContractId: "optimism-portal-contract-id",
   withdrawal: message.withdrawal,
-  disputeGameIndex,
-  outputRootProof,
-  withdrawalProof,
+  ...proof,
 });
 
 const finalize = buildFinalizeWithdrawalTransaction({
@@ -284,11 +321,13 @@ The SDK should:
 - keep default gas prices for normal Dusk L1 calls node-derived or explicit,
   not deployment-priced by default.
 - expose withdrawal stages without hiding the OP prove/finalize lifecycle.
+- verify selected dispute-game root claims against L2 block and storage proofs.
 
 The SDK should not:
 
 - synthesize adapter runtime state;
-- select dispute games or manufacture withdrawal proofs;
+- treat an RPC response as canonical without matching it to the respected
+  dispute game's committed output root;
 - canonicalize Dusk L1 data;
 - hide OP-style bridge stages;
 - assume one browser wallet or one node implementation.
@@ -301,6 +340,7 @@ The SDK should not:
 - `@dusk/evm-sdk/l1`: Dusk transaction clients, gas, and confirmation helpers.
 - `@dusk/evm-sdk/l2`: DuskEVM chains, viem clients, ABIs, and raw call encoders.
 - `@dusk/evm-sdk/status`: generic operation polling and status types.
+- `@dusk/evm-sdk/xdm`: generic messaging, proofs, lifecycle, and replay.
 
 ## Contract Interface Updates
 
@@ -322,5 +362,7 @@ the public SDK CI validates the committed projection as normal source code.
 
 See [docs/architecture.md](docs/architecture.md) for the initial package
 boundaries and follow-up work. See [docs/local-smoke.md](docs/local-smoke.md)
-for the optional local Rusk + DuskEVM SDK smoke harness. Maintainers should use
+for the optional local Rusk + DuskEVM SDK smoke harness, and
+[docs/cross-domain-messaging.md](docs/cross-domain-messaging.md) for the generic
+message lifecycle and receiver requirements. Maintainers should use
 [docs/releasing.md](docs/releasing.md) for the manual release process.

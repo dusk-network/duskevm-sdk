@@ -1,5 +1,24 @@
 # Examples
 
+## Dusk Connect Browser Setup
+
+```ts
+import { createDuskConnectL1Client } from "@dusk/evm-sdk";
+
+const l1 = createDuskConnectL1Client(duskWallet, {
+  privacy: "public",
+  encodeContractCall: systemContracts.encodeCall,
+  readContract: systemContracts.read,
+  waitForTransaction: transactions.waitForReceipt,
+});
+```
+
+The host application owns `systemContracts` and `transactions`. They provide
+RKYV contract-call encoding, decoded system-contract reads, and receipt tracking
+for the active deployment. The SDK does not claim compatibility with generic
+generated data drivers because the system contracts require explicit wire
+representations.
+
 ## Decode an SDK Deposit Envelope
 
 ```ts
@@ -14,12 +33,10 @@ console.log(decoded.target);
 ```ts
 import { prepareDuskContractCall } from "@dusk/evm-sdk";
 
-const fnArgs = await targetContract.encode("record_value", { value: "42" });
 const contractCall = prepareDuskContractCall({
   targetContractId:
     "0x1212121212121212121212121212121212121212121212121212121212121212",
-  entrypoint: "record_value",
-  fnArgs,
+  payload: applicationMessage,
   minGasLimit: 150_000,
 });
 
@@ -30,19 +47,16 @@ await walletClient.sendTransaction({
 });
 ```
 
-`fnArgs` is the target data driver's normal Piecrust encoding for the selected
-entrypoint. This operation cannot carry value. Use the bridge withdrawal
-helpers for DUSK, DRC20, or DRC721 transfers.
+`payload` is the application's raw byte payload. The native Messenger applies
+the Piecrust `Vec<u8>` argument encoding when it invokes the fixed
+`dusk_xdm_execute(Vec<u8>)` receiver. This operation cannot carry value. Use the
+bridge withdrawal helpers for DUSK, DRC20, or DRC721 transfers.
 
 ## Submit a Dusk-to-L2 Contract Call
 
 ```ts
-import {
-  createDuskConnectL1Client,
-  submitDuskEvmContractCall,
-} from "@dusk/evm-sdk";
+import { submitDuskEvmContractCall } from "@dusk/evm-sdk";
 
-const l1 = createDuskConnectL1Client(duskWallet);
 const message = await submitDuskEvmContractCall(
   l1,
   {
@@ -90,16 +104,14 @@ const drc20Deposit = bridge.prepareDrc20Deposit({
 });
 ```
 
-## Submit Through a Dusk Connect-compatible Wallet
+## Submit Through Dusk Connect
 
 ```ts
 import {
   createBridgeClient,
-  createDuskConnectL1Client,
   parseDuskToLux,
 } from "@dusk/evm-sdk";
 
-const l1 = createDuskConnectL1Client(duskWallet);
 const bridge = createBridgeClient({
   l1,
   contracts: {
@@ -115,6 +127,8 @@ const deposit = bridge.prepareNativeDeposit({
 const submitted = await bridge.submitPreparedOperation(deposit);
 console.log(submitted.transactionHash);
 ```
+
+The shared browser setup above supplies `l1`.
 
 ## Wait for a Dusk L1 Transaction
 
@@ -216,35 +230,42 @@ context; no recipient registration transaction is involved.
 
 ```ts
 import {
-  buildFinalizeWithdrawalTransaction,
-  buildProveWithdrawalTransaction,
   parseMessagePassedReceipt,
+  submitFinalizeWithdrawalTransaction,
+  submitProveWithdrawalTransaction,
 } from "@dusk/evm-sdk";
 
 const message = parseMessagePassedReceipt(l2Receipt);
 
-const proveRequest = buildProveWithdrawalTransaction({
-  portalContractId: "optimism-portal-contract-id",
-  withdrawal: message.withdrawal,
-  disputeGameIndex,
-  outputRootProof,
-  withdrawalProof,
-  gasLimit: 1_000_000n,
-});
+const prove = await submitProveWithdrawalTransaction(
+  l1,
+  {
+    portalContractId: "optimism-portal-contract-id",
+    withdrawal: message.withdrawal,
+    disputeGameIndex,
+    outputRootProof,
+    withdrawalProof,
+    gasLimit: 1_000_000n,
+  },
+  { wait: true }
+);
 
-const finalizeRequest = buildFinalizeWithdrawalTransaction({
-  portalContractId: "optimism-portal-contract-id",
-  withdrawal: message.withdrawal,
-  gasLimit: 40_000_000n,
-});
-
-await l1.submitTransaction(proveRequest);
-await l1.submitTransaction(finalizeRequest);
+// Submit only after the Portal reports that the proven withdrawal is finalizable.
+const finalize = await submitFinalizeWithdrawalTransaction(
+  l1,
+  {
+    portalContractId: "optimism-portal-contract-id",
+    withdrawal: message.withdrawal,
+    gasLimit: 40_000_000n,
+  },
+  { wait: true }
+);
 ```
 
 The SDK validates the `MessagePassed` withdrawal hash against the decoded event
-payload. It does not decide which dispute game is valid or fetch storage proofs;
-pass those observations in from your op-node/L2/Rusk integration.
+payload. `findWithdrawalProof` fetches the L2 block and storage proof, scans
+Portal-admissible dispute games through `createWithdrawalGameReader`, and returns only
+a proof whose computed output root matches the game's committed root claim.
 
 ## Track Withdrawal Status
 

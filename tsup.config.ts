@@ -10,6 +10,7 @@ export default defineConfig({
     "src/l1/index.ts",
     "src/l2/index.ts",
     "src/status/index.ts",
+    "src/xdm/index.ts",
   ],
   format: ["esm"],
   minify: false,

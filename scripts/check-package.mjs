@@ -48,6 +48,7 @@ try {
     "dist/l1/index.js",
     "dist/l2/index.js",
     "dist/status/index.js",
+    "dist/xdm/index.js",
     "package.json",
   ]) {
     if (!files.has(expected)) throw new Error(`Packed package is missing ${expected}`);
@@ -86,6 +87,7 @@ try {
       "@dusk/evm-sdk/l1",
       "@dusk/evm-sdk/l2",
       "@dusk/evm-sdk/status",
+      "@dusk/evm-sdk/xdm",
     ];
     for (const entrypoint of entrypoints) await import(entrypoint);
     const sdk = await import("@dusk/evm-sdk");

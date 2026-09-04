@@ -83,8 +83,10 @@ The script prepares and can submit:
 
 ## Withdrawal Prove/Finalize
 
-The SDK does not fetch or decide withdrawal proofs. To submit prove/finalize,
-provide proof data collected from the local op-node/L2/Rusk integration:
+This legacy smoke script accepts a pre-collected proof JSON so it can run with
+minimal command adapters. Production integrations can instead use
+`createWithdrawalGameReader` and `findWithdrawalProof` from the public `xdm`
+surface to select a root-matched proof from the live local stack:
 
 ```sh
 export SDK_SMOKE_PORTAL_ID='<optimism portal contract id>'
@@ -151,11 +153,19 @@ By default token calls are prepared but not submitted, because token balances
 and approvals are setup-specific. Set `SDK_SMOKE_SEND_TOKEN_WITHDRAWALS=1` to
 submit them against a local setup that has the required balances and approvals.
 
+## Generic Messaging
+
+`npm run smoke:local:xdm -- send-l2-contract ...` submits an SDK-encoded
+payload through the local Solidity XDM fixture and verifies the resulting
+`MessagePassed` withdrawal. `track-dusk-to-l2` follows a native contract
+submission through the adapter and L2 relay. The contracts repository E2E
+harness supplies fixture addresses and performs native proof, finalization,
+authentication, replay, and receiver-state assertions.
+
 ## Boundary
 
-This harness exercises SDK-generated requests and L2 calldata. It deliberately
-delegates Rusk wallet submission and proof collection to local setup adapters so
-the SDK remains wallet-implementation agnostic.
+This harness exercises SDK-generated requests and L2 calldata. It delegates
+Rusk wallet submission to a local adapter so the SDK remains wallet-neutral.
 
 The packaged `scripts/*` files are internal local smoke tooling, not stable SDK
 entrypoints. The supported package API is limited to the subpaths declared in

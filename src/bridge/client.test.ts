@@ -36,7 +36,6 @@ describe("bridge client", () => {
             contractId: "bridge",
             method: "deposit",
             args: { id: operationId },
-            gasPriceLux: 1n,
           });
           return { transactionHash: "tx-hash" };
         },
@@ -406,15 +405,14 @@ describe("bridge client", () => {
   });
 
   it("submits typed deposits and returns resumable status metadata", async () => {
+    const getGasPriceLux = vi.fn(async () => 7n);
     const bridge = createBridgeClient({
       l1: {
         async submitTransaction(request) {
-          expect(request.gasPriceLux).toBe(7n);
+          expect(request.gasPriceLux).toBeUndefined();
           return { transactionHash: "dusk-tx" };
         },
-        async getGasPriceLux() {
-          return 7n;
-        },
+        getGasPriceLux,
       },
       contracts: {
         l1StandardBridgeContractId: "standard-bridge",
@@ -443,6 +441,7 @@ describe("bridge client", () => {
         },
       },
     });
+    expect(getGasPriceLux).not.toHaveBeenCalled();
   });
 
   it("does not collide when payloads differ for the same asset and recipient", () => {

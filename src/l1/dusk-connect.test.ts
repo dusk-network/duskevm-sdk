@@ -1,14 +1,23 @@
+import { sdkError } from "../errors.js";
 import { createDuskConnectL1Client } from "./dusk-connect.js";
+import { waitForDuskL1Transaction } from "./wait.js";
+
+const TRANSACTION_HASH = "11".repeat(32);
+const OTHER_TRANSACTION_HASH = "22".repeat(32);
 
 describe("Dusk Connect L1 client adapter", () => {
-  it("submits wallet transactions and normalizes hashes", async () => {
+  it("uses the current low-level wallet contract-call shape with encoded arguments", async () => {
     const calls: unknown[] = [];
-    const client = createDuskConnectL1Client({
-      async sendTransaction(request) {
-        calls.push(request);
-        return { transactionHash: "dusk-tx" };
+    const encodeContractCall = vi.fn(async () => new Uint8Array([0xaa, 0xbb]));
+    const client = createDuskConnectL1Client(
+      {
+        async sendTransaction(request) {
+          calls.push(request);
+          return { hash: TRANSACTION_HASH };
+        },
       },
-    });
+      { privacy: "public", encodeContractCall }
+    );
 
     await expect(
       client.submitTransaction({
@@ -16,80 +25,177 @@ describe("Dusk Connect L1 client adapter", () => {
         contractId: "bridge",
         method: "deposit",
         args: { amount: "1" },
+        amountLux: 5n,
         gasLimit: 10n,
+        gasPriceLux: 2n,
+        metadata: { source: "test" },
       })
-    ).resolves.toEqual({ transactionHash: "dusk-tx", raw: { transactionHash: "dusk-tx" } });
+    ).resolves.toMatchObject({ transactionHash: TRANSACTION_HASH });
 
-    expect(calls).toEqual([
-      {
-        kind: "contract_call",
-        contract: "bridge",
-        fn: "deposit",
-        args: { amount: "1" },
-        gasLimit: "10",
-      },
-    ]);
-  });
-
-  it("preserves optional wallet transaction fields when provided", async () => {
-    const calls: unknown[] = [];
-    const client = createDuskConnectL1Client({
-      async sendTransaction(request) {
-        calls.push(request);
-        return { hash: "dusk-tx" };
-      },
-    });
-
-    await client.submitTransaction({
-      kind: "contract_call",
+    expect(encodeContractCall).toHaveBeenCalledWith({
       contractId: "bridge",
       method: "deposit",
       args: { amount: "1" },
-      gasLimit: 10n,
-      gasPriceLux: 2n,
-      metadata: { source: "test" },
     });
-
     expect(calls).toEqual([
       {
         kind: "contract_call",
-        contract: "bridge",
-        fn: "deposit",
-        args: { amount: "1" },
-        gasLimit: "10",
-        gasPrice: "2",
-        metadata: { source: "test" },
+        privacy: "public",
+        contractId: "bridge",
+        fnName: "deposit",
+        fnArgs: new Uint8Array([0xaa, 0xbb]),
+        deposit: "5",
+        gas: { limit: "10", price: "2" },
+        display: { source: "test" },
       },
     ]);
   });
 
-  it("normalizes object gas price responses", async () => {
-    const client = createDuskConnectL1Client({
-      async sendTransaction() {
-        return "hash";
+  it("uses the Dusk Connect average gas-price statistic", async () => {
+    const client = createDuskConnectL1Client(
+      {
+        async sendTransaction() {
+          return { hash: TRANSACTION_HASH };
+        },
+        async getGasPrice() {
+          return { average: "123", max: "999", median: "100", min: "1" };
+        },
       },
-      async getGasPrice() {
-        return { gasPrice: "123" };
-      },
-    });
+      { privacy: "public", encodeContractCall: async () => "0x" }
+    );
 
     await expect(client.getGasPriceLux?.()).resolves.toBe(123n);
   });
 
-  it("passes an application-provided read adapter through to bridge workflows", async () => {
-    const readContract = vi.fn(async () => ["state"]);
+  it.each([
+    [{ status: "executed", ok: null }, "CLIENT_ERROR"],
+    [{ status: "failed", ok: false }, "TRANSACTION_FAILED"],
+    [{ status: "timeout", ok: false }, "TIMEOUT"],
+    [{ status: "executed", ok: true, success: false }, "CLIENT_ERROR"],
+  ])("fails closed for non-success receipt %#", async (receipt, code) => {
     const client = createDuskConnectL1Client(
       {
         async sendTransaction() {
-          return "hash";
+          return { hash: TRANSACTION_HASH };
         },
       },
-      { readContract }
+      {
+        privacy: "public",
+        encodeContractCall: async () => "0x",
+        waitForTransaction: async () => ({ hash: TRANSACTION_HASH, ...receipt }),
+      }
+    );
+
+    await expect(waitForDuskL1Transaction(client, TRANSACTION_HASH)).rejects.toMatchObject({ code });
+  });
+
+  it("allows the host receipt tracker to retry after a transient wait failure", async () => {
+    const waitForTransaction = vi
+      .fn()
+      .mockRejectedValueOnce(sdkError("TIMEOUT", "timed out"))
+      .mockResolvedValueOnce({ hash: TRANSACTION_HASH, status: "executed", ok: true });
+    const client = createDuskConnectL1Client(
+      {
+        async sendTransaction() {
+          return { hash: TRANSACTION_HASH };
+        },
+      },
+      {
+        privacy: "public",
+        encodeContractCall: async () => "0x",
+        waitForTransaction,
+      }
+    );
+
+    await expect(waitForDuskL1Transaction(client, TRANSACTION_HASH)).rejects.toMatchObject({
+      code: "TIMEOUT",
+    });
+    await expect(waitForDuskL1Transaction(client, TRANSACTION_HASH)).resolves.toMatchObject({
+      success: true,
+    });
+    expect(waitForTransaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("binds a successful receipt to the requested transaction hash", async () => {
+    const receipt = vi.fn(async () => ({
+      hash: OTHER_TRANSACTION_HASH,
+      status: "executed",
+      ok: true,
+    }));
+    const client = duskConnectClientWithReceipt(receipt);
+
+    await expect(waitForDuskL1Transaction(client, TRANSACTION_HASH)).rejects.toMatchObject({
+      code: "CLIENT_ERROR",
+    });
+  });
+
+  it("accepts equivalent hash forms and keeps the canonical requested identity", async () => {
+    const client = duskConnectClientWithReceipt(async () => ({
+      transactionHash: TRANSACTION_HASH.toUpperCase(),
+      hash: `0x${TRANSACTION_HASH}`,
+      status: "executed",
+      ok: true,
+    }));
+
+    await expect(
+      waitForDuskL1Transaction(client, `0X${TRANSACTION_HASH.toUpperCase()}`)
+    ).resolves.toMatchObject({ transactionHash: TRANSACTION_HASH, success: true });
+  });
+
+  it("rejects conflicting receipt hash aliases", async () => {
+    const client = duskConnectClientWithReceipt(async () => ({
+      transactionHash: TRANSACTION_HASH,
+      hash: OTHER_TRANSACTION_HASH,
+      status: "executed",
+      ok: true,
+    }));
+
+    await expect(waitForDuskL1Transaction(client, TRANSACTION_HASH)).rejects.toMatchObject({
+      code: "CLIENT_ERROR",
+    });
+  });
+
+  it("accepts a successful receipt without a reported hash", async () => {
+    const client = duskConnectClientWithReceipt(async () => ({ status: "executed", ok: true }));
+
+    await expect(waitForDuskL1Transaction(client, TRANSACTION_HASH)).resolves.toMatchObject({
+      transactionHash: TRANSACTION_HASH,
+      success: true,
+    });
+  });
+
+  it("rejects a gas price without a gas limit", async () => {
+    const client = createDuskConnectL1Client(
+      {
+        async sendTransaction() {
+          return { hash: TRANSACTION_HASH };
+        },
+      },
+      { privacy: "public", encodeContractCall: async () => "0x" }
     );
 
     await expect(
-      client.readContract?.({ contractId: "bridge", method: "nativeCredit", args: ["0x01"] })
-    ).resolves.toEqual(["state"]);
-    expect(readContract).toHaveBeenCalledOnce();
+      client.submitTransaction({
+        kind: "contract_call",
+        contractId: "bridge",
+        method: "deposit",
+        gasPriceLux: 1n,
+      })
+    ).rejects.toMatchObject({ code: "INVALID_OPERATION" });
   });
 });
+
+function duskConnectClientWithReceipt(waitForTransaction: () => Promise<unknown>) {
+  return createDuskConnectL1Client(
+    {
+      async sendTransaction() {
+        return { hash: TRANSACTION_HASH };
+      },
+    },
+    {
+      privacy: "public",
+      encodeContractCall: async () => "0x",
+      waitForTransaction,
+    }
+  );
+}

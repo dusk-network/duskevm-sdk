@@ -42,6 +42,14 @@ export type DepositReceiptClient = {
   }): Promise<DepositTransactionReceipt>;
 };
 
+/** Adapter RPC surface that resolves a native Dusk ID to its Ethereum projection. */
+export type DuskTransactionProjectionClient = {
+  request(parameters: {
+    method: "duskevm_getTransactionHashByDuskHash";
+    params: readonly [Hex];
+  }): Promise<Hex | null>;
+};
+
 /** Persistable metadata returned while observing a bridge deposit. */
 export type DepositTrackingMetadata = Record<string, JsonValue> & {
   stage: DepositLifecycleStage;
@@ -67,6 +75,10 @@ export type ObserveDepositStatusOptions = {
   l1Client: DepositReceiptClient;
   l2Client: DepositReceiptClient;
   l1TransactionHash: string;
+  expectedRelay?: {
+    messengerAddress: EvmAddress;
+    messageHash: Hex;
+  };
   metadata?: Record<string, JsonValue>;
   now?: () => number;
 };
@@ -77,6 +89,21 @@ export type WaitForDepositStatusOptions = ObserveDepositStatusOptions & {
   timeoutMs?: number;
   signal?: AbortSignal;
 };
+
+/** Resolve the canonical Ethereum-facing hash for a completed native Dusk transaction. */
+export async function resolveDuskTransactionHash(
+  client: DuskTransactionProjectionClient,
+  duskTransactionHash: string
+): Promise<Hex | null> {
+  const hash = normalizeTransactionHash(duskTransactionHash, "Dusk transaction hash");
+  const projected = await client.request({
+    method: "duskevm_getTransactionHashByDuskHash",
+    params: [hash],
+  });
+  return projected === null
+    ? null
+    : normalizeTransactionHash(projected, "projected Ethereum transaction hash");
+}
 
 const RELAYED_MESSAGE_TOPIC = keccak256(toBytes("RelayedMessage(bytes32)"));
 const FAILED_RELAYED_MESSAGE_TOPIC = keccak256(
@@ -140,6 +167,54 @@ export async function observeDepositStatus(
   }
 
   const receipts = l2Receipts as DepositTransactionReceipt[];
+  if (options.expectedRelay) {
+    const relay = relayState(receipts, options.expectedRelay);
+    if (relay === "failed") {
+      const failedReceipt = receipts.find((receipt) =>
+        receiptHasRelayEvent(receipt, FAILED_RELAYED_MESSAGE_TOPIC, options.expectedRelay!)
+      )!;
+      return depositStatus(
+        "failed",
+        "failed",
+        now(),
+        {
+          ...l2Metadata,
+          failureLayer: "l2",
+          l2BlockNumber: failedReceipt.blockNumber.toString(),
+        },
+        "The DuskEVM cross-domain relay failed"
+      );
+    }
+    if (relay === "delivered") {
+      const deliveredReceipt = receipts.find((receipt) =>
+        receiptHasRelayEvent(receipt, RELAYED_MESSAGE_TOPIC, options.expectedRelay!)
+      )!;
+      return depositStatus("finalized", "completed", now(), {
+        ...l2Metadata,
+        l2BlockNumber: deliveredReceipt.blockNumber.toString(),
+      });
+    }
+    const revertedReceipt = receipts.find((receipt) => receipt.status === "reverted");
+    if (revertedReceipt) {
+      return depositStatus(
+        "failed",
+        "failed",
+        now(),
+        {
+          ...l2Metadata,
+          failureLayer: "l2",
+          l2BlockNumber: revertedReceipt.blockNumber.toString(),
+        },
+        "The DuskEVM deposit transaction reverted"
+      );
+    }
+    throw sdkError(
+      "CLIENT_ERROR",
+      "DuskEVM deposit receipt did not confirm the expected cross-domain message",
+      receipts
+    );
+  }
+
   const failedReceipt = receipts.find(
     (receipt) =>
       receipt.status === "reverted" ||
@@ -253,6 +328,39 @@ function receiptHasTopic(
   return receipt.logs.some(
     (log) => log.topics[0]?.toLowerCase() === normalizedTopic,
   );
+}
+
+function receiptHasRelayEvent(
+  receipt: DepositTransactionReceipt,
+  topic: Hex,
+  expected: NonNullable<ObserveDepositStatusOptions["expectedRelay"]>
+): boolean {
+  const normalizedAddress = expected.messengerAddress.toLowerCase();
+  const normalizedTopic = topic.toLowerCase();
+  const normalizedMessageHash = expected.messageHash.toLowerCase();
+  return receipt.logs.some(
+    (log) =>
+      log.address.toLowerCase() === normalizedAddress &&
+      log.topics[0]?.toLowerCase() === normalizedTopic &&
+      log.topics[1]?.toLowerCase() === normalizedMessageHash
+  );
+}
+
+function relayState(
+  receipts: readonly DepositTransactionReceipt[],
+  expected: NonNullable<ObserveDepositStatusOptions["expectedRelay"]>
+): "delivered" | "failed" | "unknown" {
+  if (receipts.some((receipt) => receiptHasRelayEvent(receipt, RELAYED_MESSAGE_TOPIC, expected))) {
+    return "delivered";
+  }
+  if (
+    receipts.some((receipt) =>
+      receiptHasRelayEvent(receipt, FAILED_RELAYED_MESSAGE_TOPIC, expected)
+    )
+  ) {
+    return "failed";
+  }
+  return "unknown";
 }
 
 function normalizeTransactionHash(value: string, label: string): Hex {
