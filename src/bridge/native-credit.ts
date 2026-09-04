@@ -1,7 +1,6 @@
 import {
   bytesToHex,
   decodeFunctionData,
-  encodeAbiParameters,
   keccak256,
   parseAbi,
   type Hex,
@@ -25,6 +24,7 @@ import {
 } from "../l2/index.js";
 import type { BridgeOperationStatus } from "../status/index.js";
 import type { EvmAddress, JsonValue, LuxAmount } from "../types.js";
+import { hashOpCrossDomainMessage } from "../xdm/message-hash.js";
 import {
   decodeDuskNativeContractCredit,
   duskContractIdToEvmAddress,
@@ -172,19 +172,14 @@ export function parseNativeCreditWithdrawal(
     );
   }
 
-  const creditId = keccak256(
-    encodeAbiParameters(
-      [
-        { type: "uint256" },
-        { type: "address" },
-        { type: "address" },
-        { type: "uint256" },
-        { type: "uint256" },
-        { type: "bytes" },
-      ],
-      [nonce, sender, target, value, minGasLimit, message]
-    )
-  );
+  const creditId = hashOpCrossDomainMessage({
+    nonce,
+    sender,
+    target,
+    value,
+    minGasLimit,
+    message,
+  });
   return {
     creditId,
     targetContractId: recipient.targetContractId,

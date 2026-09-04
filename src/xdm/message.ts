@@ -2,7 +2,6 @@ import {
   decodeEventLog,
   decodeFunctionData,
   encodeFunctionData,
-  keccak256,
   toHex,
   type Hex,
 } from "viem";
@@ -27,6 +26,7 @@ import {
   type DuskEvmPreparedCall,
 } from "../l2/index.js";
 import type { EvmAddress, JsonValue } from "../types.js";
+import { hashOpCrossDomainMessage } from "./message-hash.js";
 
 const duskMessengerMethods = duskL1ContractMethods.l1CrossDomainMessenger;
 
@@ -132,20 +132,7 @@ export function hashDuskCrossDomainMessage(message: CrossDomainMessage): Hex {
 /** Compute the message identity used by the Solidity DuskEVM Messenger. */
 export function hashDuskEvmCrossDomainMessage(message: CrossDomainMessage): Hex {
   const normalized = normalizeCrossDomainMessage(message);
-  return keccak256(
-    encodeFunctionData({
-      abi: l2CrossDomainMessengerAbi,
-      functionName: "relayMessage",
-      args: [
-        normalized.nonce,
-        normalized.sender,
-        normalized.target,
-        normalized.value,
-        normalized.minGasLimit,
-        normalized.message,
-      ],
-    })
-  );
+  return hashOpCrossDomainMessage(normalized);
 }
 
 /** Build the permissionless Dusk L1 retry for a previously failed L2 message. */
