@@ -1,7 +1,6 @@
 import {
   decodeEventLog,
   decodeFunctionData,
-  encodeAbiParameters,
   encodeFunctionData,
   keccak256,
   toHex,
@@ -127,27 +126,7 @@ export function parseSentMessageReceipt(
 
 /** Compute the message identity used by the native Dusk Messenger. */
 export function hashDuskCrossDomainMessage(message: CrossDomainMessage): Hex {
-  const normalized = normalizeCrossDomainMessage(message);
-  return keccak256(
-    encodeAbiParameters(
-      [
-        { type: "uint256" },
-        { type: "address" },
-        { type: "address" },
-        { type: "uint256" },
-        { type: "uint256" },
-        { type: "bytes" },
-      ],
-      [
-        normalized.nonce,
-        normalized.sender,
-        normalized.target,
-        normalized.value,
-        normalized.minGasLimit,
-        normalized.message,
-      ]
-    )
-  );
+  return hashDuskEvmCrossDomainMessage(message);
 }
 
 /** Compute the message identity used by the Solidity DuskEVM Messenger. */

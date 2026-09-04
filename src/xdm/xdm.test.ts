@@ -80,22 +80,24 @@ describe("cross-domain message helpers", () => {
     });
     const parsed = parseCrossDomainMessageFromWithdrawal({ data });
     expect(parsed).toEqual(MESSAGE);
-    expect(hashDuskCrossDomainMessage(parsed)).toBe(
-      keccak256(
-        encodeAbiParameters(
-          [
-            { type: "uint256" },
-            { type: "address" },
-            { type: "address" },
-            { type: "uint256" },
-            { type: "uint256" },
-            { type: "bytes" },
-          ],
-          [1n, SENDER, TARGET, 0n, 150_000n, "0x1234"]
-        )
-      )
-    );
-    expect(hashDuskEvmCrossDomainMessage(parsed)).toBe(keccak256(data));
+    const canonicalHash = keccak256(data);
+    expect(hashDuskCrossDomainMessage(parsed)).toBe(canonicalHash);
+    expect(hashDuskEvmCrossDomainMessage(parsed)).toBe(canonicalHash);
+  });
+
+  it("matches the pinned OP v1 relay hash vector", () => {
+    const message: CrossDomainMessage = {
+      nonce: (1n << 240n) | 7n,
+      sender: SENDER,
+      target: TARGET,
+      value: 0n,
+      minGasLimit: 150_000n,
+      message: "0x1234",
+    };
+    const expected = "0x21041a599b5b297925a2e84e9b4188040607029a9cc29028f3e0cc5713215d69";
+
+    expect(hashDuskCrossDomainMessage(message)).toBe(expected);
+    expect(hashDuskEvmCrossDomainMessage(message)).toBe(expected);
   });
 
   it("parses SentMessage and builds both permissionless replay requests", () => {
