@@ -35,14 +35,14 @@ try {
   const contractId = `0x${"ab".repeat(32)}`;
   const recipient = sdk.duskContractIdToEvmAddress(contractId);
   const extraData = sdk.encodeDuskNativeContractCredit(contractId, "0x1234");
-  const prepareNative = (amount, extra = extraData) => JSON.parse(execFileSync(process.execPath, [
+  const prepareNative = (amount, extra = extraData, gas = "150000") => JSON.parse(execFileSync(process.execPath, [
     "scripts/local-xdm-smoke.mjs", "prepare-native-withdrawal",
     "--recipient", recipient, "--amount-wei", amount,
-    "--min-gas-limit", "150000", "--extra-data", extra,
+    "--min-gas-limit", gas, "--extra-data", extra,
   ], { cwd: repositoryRoot, encoding: "utf8", stdio: "pipe" }));
   // Exercise the actual subprocess contract, including re-preparation after a balance clamp.
-  for (const amount of ["2000000000", "1000000000"]) {
-    const prepared = prepareNative(amount);
+  for (const [amount, gas] of [["2000000000", "150000"], ["1000000000", "150000"], ["0", "0"]]) {
+    const prepared = prepareNative(amount, extraData, gas);
     assert.equal(prepared.to.toLowerCase(), "0x4200000000000000000000000000000000000010");
     assert.equal(prepared.value, amount);
     const decoded = decodeFunctionData({
@@ -51,10 +51,11 @@ try {
     });
     assert.equal(decoded.functionName, "bridgeETHTo");
     assert.equal(decoded.args[0].toLowerCase(), recipient);
-    assert.deepEqual(decoded.args.slice(1), [150000, extraData]);
+    assert.deepEqual(decoded.args.slice(1), [Number(gas), extraData]);
   }
   assert.throws(() => prepareNative("1000000000", "0x"));
-  assert.throws(() => prepareNative("0"));
+  assert.throws(() => prepareNative("-1"));
+  assert.throws(() => prepareNative("1000000000", extraData, "4294967296"));
   const packOutput = run(
     "npm",
     ["pack", "--json", "--ignore-scripts", "--pack-destination", temporaryRoot],

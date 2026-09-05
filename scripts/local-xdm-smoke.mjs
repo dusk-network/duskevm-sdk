@@ -29,8 +29,8 @@ const options = parseOptions(rawArguments);
 if (mode === "prepare-native-withdrawal") {
   printJson(prepareNativeWithdrawal({
     recipient: address(required(options, "recipient")),
-    amountWei: positiveBigint(required(options, "amount-wei"), "amount-wei"),
-    minGasLimit: positiveInteger(required(options, "min-gas-limit"), "min-gas-limit"),
+    amountWei: BigInt(required(options, "amount-wei")),
+    minGasLimit: Number(required(options, "min-gas-limit")),
     extraData: byteHex(required(options, "extra-data")),
   }).l2Transaction);
 } else if (mode === "send-l2-contract") {
