@@ -16,6 +16,7 @@ import {
   createWithdrawalGameReader,
   findWithdrawalProof,
   l2CrossDomainMessengerAbi,
+  prepareNativeWithdrawal,
   prepareDuskEvmContractCall,
   submitDuskContractCall,
   validateDuskEvmDeployment,
@@ -25,7 +26,14 @@ import {
 const [mode, ...rawArguments] = process.argv.slice(2);
 const options = parseOptions(rawArguments);
 
-if (mode === "send-l2-contract") {
+if (mode === "prepare-native-withdrawal") {
+  printJson(prepareNativeWithdrawal({
+    recipient: address(required(options, "recipient")),
+    amountWei: positiveBigint(required(options, "amount-wei"), "amount-wei"),
+    minGasLimit: positiveInteger(required(options, "min-gas-limit"), "min-gas-limit"),
+    extraData: byteHex(required(options, "extra-data")),
+  }).l2Transaction);
+} else if (mode === "send-l2-contract") {
   await sendL2ContractCall(options);
 } else if (mode === "build-withdrawal-proof") {
   await buildLiveWithdrawalProof(options);
@@ -35,7 +43,7 @@ if (mode === "send-l2-contract") {
   await trackDuskToL2(options);
 } else {
   throw new Error(
-    "Usage: local-xdm-smoke.mjs <send-l2-contract|build-withdrawal-proof|select-withdrawal-proof|track-dusk-to-l2> --key value ..."
+    "Usage: local-xdm-smoke.mjs <prepare-native-withdrawal|send-l2-contract|build-withdrawal-proof|select-withdrawal-proof|track-dusk-to-l2> --key value ..."
   );
 }
 

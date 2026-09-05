@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
+import assert from "node:assert/strict";
+import { decodeFunctionData, parseAbi } from "viem";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -29,6 +31,30 @@ try {
   }
 
   run("npm", ["run", "build"], repositoryRoot);
+  const sdk = await import("../dist/index.js");
+  const contractId = `0x${"ab".repeat(32)}`;
+  const recipient = sdk.duskContractIdToEvmAddress(contractId);
+  const extraData = sdk.encodeDuskNativeContractCredit(contractId, "0x1234");
+  const prepareNative = (amount, extra = extraData) => JSON.parse(execFileSync(process.execPath, [
+    "scripts/local-xdm-smoke.mjs", "prepare-native-withdrawal",
+    "--recipient", recipient, "--amount-wei", amount,
+    "--min-gas-limit", "150000", "--extra-data", extra,
+  ], { cwd: repositoryRoot, encoding: "utf8", stdio: "pipe" }));
+  // Exercise the actual subprocess contract, including re-preparation after a balance clamp.
+  for (const amount of ["2000000000", "1000000000"]) {
+    const prepared = prepareNative(amount);
+    assert.equal(prepared.to.toLowerCase(), "0x4200000000000000000000000000000000000010");
+    assert.equal(prepared.value, amount);
+    const decoded = decodeFunctionData({
+      abi: parseAbi(["function bridgeETHTo(address to, uint32 minGasLimit, bytes extraData) payable"]),
+      data: prepared.data,
+    });
+    assert.equal(decoded.functionName, "bridgeETHTo");
+    assert.equal(decoded.args[0].toLowerCase(), recipient);
+    assert.deepEqual(decoded.args.slice(1), [150000, extraData]);
+  }
+  assert.throws(() => prepareNative("1000000000", "0x"));
+  assert.throws(() => prepareNative("0"));
   const packOutput = run(
     "npm",
     ["pack", "--json", "--ignore-scripts", "--pack-destination", temporaryRoot],
