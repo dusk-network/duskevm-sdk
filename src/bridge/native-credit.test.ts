@@ -1,5 +1,4 @@
 import {
-  encodeAbiParameters,
   encodeFunctionData,
   keccak256,
   parseAbi,
@@ -239,17 +238,7 @@ function nativeCreditWithdrawal(options: {
     functionName: "relayMessage",
     args: relayArgs,
   });
-  const creditId = keccak256(encodeAbiParameters(
-    [
-      { type: "uint256" },
-      { type: "address" },
-      { type: "address" },
-      { type: "uint256" },
-      { type: "uint256" },
-      { type: "bytes" },
-    ],
-    relayArgs
-  ));
+  const creditId = keccak256(data);
   return {
     creditId,
     withdrawal: {
