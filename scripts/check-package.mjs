@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { decodeFunctionData, parseAbi } from "viem";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -56,6 +56,25 @@ try {
   assert.throws(() => prepareNative("1000000000", "0x"));
   assert.throws(() => prepareNative("-1"));
   assert.throws(() => prepareNative("1000000000", extraData, "4294967296"));
+  const readDriver = path.join(temporaryRoot, "empty-factory.mjs");
+  await writeFile(readDriver, `#!/usr/bin/env node
+    let input = "";
+    for await (const chunk of process.stdin) input += chunk;
+    const { method } = JSON.parse(input);
+    console.log(JSON.stringify(method === "gameCount" ? "0" : "0x" + "ab".repeat(32)));
+  `, { mode: 0o700 });
+  const selectArgs = ["scripts/local-xdm-smoke.mjs", "select-withdrawal-proof",
+    "--l1-read-driver", readDriver, "--rusk-url", "http://127.0.0.1:1",
+    "--l2-rpc-url", "http://127.0.0.1:1", "--portal-contract-id", contractId,
+    "--withdrawal-hash", `0x${"cd".repeat(32)}`, "--withdrawal-block-number", "1"];
+  const emptyFactory = spawnSync(process.execPath, selectArgs, { cwd: repositoryRoot, encoding: "utf8" });
+  assert.equal(emptyFactory.status, 75, emptyFactory.stderr);
+  assert.equal(emptyFactory.stdout, "");
+  assert.match(emptyFactory.stderr, /No dispute games/);
+  await writeFile(readDriver, "#!/usr/bin/env node\nconsole.log('invalid JSON');\n");
+  const brokenReader = spawnSync(process.execPath, selectArgs, { cwd: repositoryRoot, encoding: "utf8" });
+  assert.equal(brokenReader.status, 1, brokenReader.stderr);
+  assert.match(brokenReader.stderr, /invalid JSON/);
   const packOutput = run(
     "npm",
     ["pack", "--json", "--ignore-scripts", "--pack-destination", temporaryRoot],

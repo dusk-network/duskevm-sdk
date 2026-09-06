@@ -38,7 +38,13 @@ if (mode === "prepare-native-withdrawal") {
 } else if (mode === "build-withdrawal-proof") {
   await buildLiveWithdrawalProof(options);
 } else if (mode === "select-withdrawal-proof") {
-  await selectLiveWithdrawalProof(options);
+  try {
+    await selectLiveWithdrawalProof(options);
+  } catch (error) {
+    if (error?.code !== "UNAVAILABLE") throw error;
+    console.error(error.message);
+    process.exitCode = 75;
+  }
 } else if (mode === "track-dusk-to-l2") {
   await trackDuskToL2(options);
 } else {

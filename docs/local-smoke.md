@@ -11,9 +11,12 @@ It prepares the modern `bridgeETHTo` call without network access or signing.
 The contracts harness retains signing, fee replacement, nonce recovery, and
 balance clamping, re-preparing the call after a clamp. It also retains native
 proof/finalize submission, game resolution, and independent proof and payout
-assertions. The existing `select-withdrawal-proof` mode exercises SDK proof
-discovery against the live deployment. This pilot does not yet retire the raw
-legacy withdrawal path or consolidate the complete lifecycle into the SDK.
+assertions. `select-withdrawal-proof` is the contracts rehearsal's sole game
+selector. Exit 75 means no matching proof is available yet; other failures are
+fatal. The caller owns bounded polling and local chain progression. Rust checks
+the selected game independently instead of running a competing selector.
+Native preparation and game selection are consolidated, not game resolution
+or native wallet transport.
 
 ## Standalone Harness
 
