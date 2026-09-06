@@ -12,7 +12,6 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import {
   DUSK_CONTRACT_CALL_TARGET,
-  buildWithdrawalOutputProof,
   createWithdrawalGameReader,
   findWithdrawalProof,
   l2CrossDomainMessengerAbi,
@@ -35,8 +34,6 @@ if (mode === "prepare-native-withdrawal") {
   }).l2Transaction);
 } else if (mode === "send-l2-contract") {
   await sendL2ContractCall(options);
-} else if (mode === "build-withdrawal-proof") {
-  await buildLiveWithdrawalProof(options);
 } else if (mode === "select-withdrawal-proof") {
   try {
     await selectLiveWithdrawalProof(options);
@@ -49,17 +46,8 @@ if (mode === "prepare-native-withdrawal") {
   await trackDuskToL2(options);
 } else {
   throw new Error(
-    "Usage: local-xdm-smoke.mjs <prepare-native-withdrawal|send-l2-contract|build-withdrawal-proof|select-withdrawal-proof|track-dusk-to-l2> --key value ..."
+    "Usage: local-xdm-smoke.mjs <prepare-native-withdrawal|send-l2-contract|select-withdrawal-proof|track-dusk-to-l2> --key value ..."
   );
-}
-
-async function buildLiveWithdrawalProof(values) {
-  const rpcUrl = required(values, "rpc-url");
-  const withdrawalHash = bytes32(required(values, "withdrawal-hash"));
-  const blockNumber = positiveBigint(required(values, "block-number"), "block-number");
-  const client = createPublicClient({ transport: http(rpcUrl) });
-  const proof = await buildWithdrawalOutputProof({ client, withdrawalHash, blockNumber });
-  printJson({ blockNumber, ...proof });
 }
 
 async function selectLiveWithdrawalProof(values) {

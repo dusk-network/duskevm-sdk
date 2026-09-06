@@ -17,6 +17,8 @@ fatal. The caller owns bounded polling and local chain progression. Rust checks
 the selected game independently instead of running a competing selector.
 Native preparation and game selection are consolidated, not game resolution
 or native wallet transport.
+The unused internal `build-withdrawal-proof` command is retired in favor of
+`select-withdrawal-proof`; the public `buildWithdrawalOutputProof` API remains.
 
 ## Standalone Harness
 
