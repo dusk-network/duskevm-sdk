@@ -1,5 +1,27 @@
 # Local SDK Smoke Harness
 
+## Contracts Rehearsal Driver
+
+The contracts repository can set `OP_STACK_SDK_XDM_DRIVER` to the built SDK's
+`scripts/local-xdm-smoke.mjs`. Its `prepare-native-withdrawal` mode accepts
+`--recipient`, `--amount-wei`, `--min-gas-limit`, and `--extra-data`, and returns
+the SDK's `{ to, data, value }` transaction JSON (value is a decimal string).
+It prepares the modern `bridgeETHTo` call without network access or signing.
+
+The contracts harness retains signing, fee replacement, nonce recovery, and
+balance clamping, re-preparing the call after a clamp. It also retains native
+proof/finalize submission, game resolution, and independent proof and payout
+assertions. `select-withdrawal-proof` is the contracts rehearsal's sole game
+selector. Exit 75 means no matching proof is available yet; other failures are
+fatal. The caller owns bounded polling and local chain progression. Rust checks
+the selected game independently instead of running a competing selector.
+Native preparation and game selection are consolidated, not game resolution
+or native wallet transport.
+The unused internal `build-withdrawal-proof` command is retired in favor of
+`select-withdrawal-proof`; the public `buildWithdrawalOutputProof` API remains.
+
+## Standalone Harness
+
 The SDK smoke harness is an optional developer tool for an already-running
 local Rusk + DuskEVM setup. It is not part of CI by default.
 

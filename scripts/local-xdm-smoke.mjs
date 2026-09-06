@@ -12,10 +12,10 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import {
   DUSK_CONTRACT_CALL_TARGET,
-  buildWithdrawalOutputProof,
   createWithdrawalGameReader,
   findWithdrawalProof,
   l2CrossDomainMessengerAbi,
+  prepareNativeWithdrawal,
   prepareDuskEvmContractCall,
   submitDuskContractCall,
   validateDuskEvmDeployment,
@@ -25,27 +25,29 @@ import {
 const [mode, ...rawArguments] = process.argv.slice(2);
 const options = parseOptions(rawArguments);
 
-if (mode === "send-l2-contract") {
+if (mode === "prepare-native-withdrawal") {
+  printJson(prepareNativeWithdrawal({
+    recipient: address(required(options, "recipient")),
+    amountWei: BigInt(required(options, "amount-wei")),
+    minGasLimit: Number(required(options, "min-gas-limit")),
+    extraData: byteHex(required(options, "extra-data")),
+  }).l2Transaction);
+} else if (mode === "send-l2-contract") {
   await sendL2ContractCall(options);
-} else if (mode === "build-withdrawal-proof") {
-  await buildLiveWithdrawalProof(options);
 } else if (mode === "select-withdrawal-proof") {
-  await selectLiveWithdrawalProof(options);
+  try {
+    await selectLiveWithdrawalProof(options);
+  } catch (error) {
+    if (error?.code !== "UNAVAILABLE") throw error;
+    console.error(error.message);
+    process.exitCode = 75;
+  }
 } else if (mode === "track-dusk-to-l2") {
   await trackDuskToL2(options);
 } else {
   throw new Error(
-    "Usage: local-xdm-smoke.mjs <send-l2-contract|build-withdrawal-proof|select-withdrawal-proof|track-dusk-to-l2> --key value ..."
+    "Usage: local-xdm-smoke.mjs <prepare-native-withdrawal|send-l2-contract|select-withdrawal-proof|track-dusk-to-l2> --key value ..."
   );
-}
-
-async function buildLiveWithdrawalProof(values) {
-  const rpcUrl = required(values, "rpc-url");
-  const withdrawalHash = bytes32(required(values, "withdrawal-hash"));
-  const blockNumber = positiveBigint(required(values, "block-number"), "block-number");
-  const client = createPublicClient({ transport: http(rpcUrl) });
-  const proof = await buildWithdrawalOutputProof({ client, withdrawalHash, blockNumber });
-  printJson({ blockNumber, ...proof });
 }
 
 async function selectLiveWithdrawalProof(values) {
