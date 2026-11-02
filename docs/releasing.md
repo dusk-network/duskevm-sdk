@@ -1,7 +1,8 @@
 # Releasing
 
-Releases are intentionally manual. There is no tag-triggered publishing workflow
-and no OIDC configuration yet.
+A `v*` tag publishes that version to JSR through `.github/workflows/publish.yml`,
+authenticated through this repository's GitHub OIDC token. npm publishing is
+still manual.
 
 ## Prerequisites
 
@@ -38,17 +39,21 @@ npm view @dusk/evm-sdk dist-tags
 
 ## Publish JSR Prerelease
 
+Push the release tag from the release commit on `main`:
+
 ```sh
-npx jsr publish
+git tag v0.1.0-beta.4
+git push origin v0.1.0-beta.4
 ```
 
-This uses JSR's interactive browser authorization. It does not create provenance
-because OIDC publishing is deliberately deferred.
+The Publish workflow checks that the tagged commit is on `main` and that the tag
+matches `package.json` and `jsr.json`, runs `npm run check`, and publishes with
+provenance. It skips a version JSR already has, so a failed run can be run
+again.
 
 After the first JSR publish, set the package description and mark Node.js, Deno,
 and browsers as supported in the package settings. Leave Bun and Cloudflare
-Workers as unknown until they have dedicated compatibility coverage. Link the
-public GitHub repository for discoverability even while OIDC remains unused.
+Workers as unknown until they have dedicated compatibility coverage.
 
 ## Promote to Stable
 
